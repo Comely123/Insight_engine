@@ -16,6 +16,7 @@ data/imports/
 data/media/
 data/models/
 data/exports/
+data/jobs/
 data/backups/
 data/benchmarks/
 data/logs/

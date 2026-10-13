@@ -81,6 +81,7 @@ INSIGHT_ASR_MODEL=tiny
 | 报告 | 文字发现/建议/文献共性 + 多种图表；可导出 MD/PDF |
 | 模型 | 规则 / OpenAI / DeepSeek / 通义 / 智谱 / Kimi / 豆包 / 混元 / 百川 / Yi / 硅基流动 / 自部署 |
 | API Key | 提交分析后**加密写入本地库**（Fernet；密钥文件 `data/.fernet_key`，勿提交）；下次默认沿用 |
+| 异步任务 | 「开始分析」立即返回；切换页面后台继续，结果在「分析报告」自动刷新 |
 | 上传 | 支持 PDF 文献（`pypdf` 抽文本）；扫描件纯图片 PDF 需先 OCR |
 | 云部署 | 优先阿里云；见 `docs/CLOUD_DECISION.md` |
 

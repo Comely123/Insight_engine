@@ -369,3 +369,22 @@ CREATE TABLE IF NOT EXISTS app_secrets (
   ciphertext   BLOB NOT NULL,
   updated_at   TEXT NOT NULL
 );
+
+-- Async public analysis jobs (continue while user switches pages)
+CREATE TABLE IF NOT EXISTS analysis_jobs (
+  job_id         TEXT PRIMARY KEY,
+  anonymous_id   TEXT,
+  status         TEXT NOT NULL,
+  message        TEXT,
+  mode           TEXT NOT NULL,
+  params_json    TEXT NOT NULL,
+  result_json    TEXT,
+  error_message  TEXT,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL,
+  finished_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_jobs_anon_created
+  ON analysis_jobs(anonymous_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status ON analysis_jobs(status);

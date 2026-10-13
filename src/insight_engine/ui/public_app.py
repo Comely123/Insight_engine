@@ -1,10 +1,10 @@
-"""Public product: two pages only — 数据采集 / 分析报告."""
+"""Public product: two pages — 数据采集 / 分析报告 (async jobs)."""
 
 from __future__ import annotations
 
 import sys
-import tempfile
 import uuid
+from datetime import timedelta
 from pathlib import Path
 
 _SRC = Path(__file__).resolve().parents[2]
@@ -18,8 +18,8 @@ from insight_engine.db.connection import initialize_database
 from insight_engine.export.pdf_report import markdown_to_pdf_bytes
 from insight_engine.llm.presets import PRESETS, preset_by_id
 from insight_engine.ops.secrets_store import SecretsStore
+from insight_engine.product.job_runner import latest_job, submit_public_analysis
 from insight_engine.product.narrative import narrative_to_markdown
-from insight_engine.product.pipeline import PublicAnalysisService
 from insight_engine.ui.charts import render_distribution
 from insight_engine.ui.theme import PUBLIC_CSS
 
@@ -57,8 +57,19 @@ def _report_markdown(result: dict) -> str:
     return "# 分析报告\n"
 
 
+def _active_banner() -> None:
+    job = latest_job(st.session_state.anonymous_id)
+    if not job:
+        return
+    if job["status"] in {"queued", "running"}:
+        st.info(f"后台任务进行中：{job.get('message') or job['status']}（可切换页面，完成后在「分析报告」查看）")
+    elif job["status"] == "failed" and st.session_state.get("job_id") == job["job_id"]:
+        st.error(job.get("error_message") or job.get("message") or "任务失败")
+
+
 def page_collect() -> None:
     st.markdown('<p class="page-title">数据采集</p>', unsafe_allow_html=True)
+    _active_banner()
 
     mode = st.radio(
         "数据来源",
@@ -173,30 +184,23 @@ def page_collect() -> None:
                 st.caption(preset.note)
             if preset.needs_key or provider == "local":
                 if saved.get("has_api_key"):
-                    st.caption("已保存加密 API Key（数据库密文存储）。留空沿用；填写则更新。")
+                    st.caption("已保存加密 API Key。留空沿用；填写则更新。")
                 default_key = "local" if provider == "local" and not saved.get("has_api_key") else ""
                 llm_key_input = st.text_input(
                     "API Key",
                     type="password",
                     value=default_key,
-                    placeholder="已保存则留空" if saved.get("has_api_key") else "粘贴后分析时自动加密保存",
+                    placeholder="已保存则留空" if saved.get("has_api_key") else "粘贴后自动加密保存",
                 )
                 clear_key = st.checkbox("清除该模型已保存的 API Key", value=False)
 
     if st.button("开始分析", type="primary", width="stretch"):
         keywords = _split_keywords(keywords_raw)
-        paths: list[Path] = []
-        tmp_dir = None
         try:
             if mode == "upload":
                 if not uploaded:
                     st.error("请先上传文件")
                     st.stop()
-                tmp_dir = Path(tempfile.mkdtemp(prefix="insight_up_"))
-                for f in uploaded:
-                    p = tmp_dir / f.name
-                    p.write_bytes(f.getvalue())
-                    paths.append(p)
             elif not collector_ids:
                 st.error("请至少选择一个采集源")
                 st.stop()
@@ -210,11 +214,10 @@ def page_collect() -> None:
             resolved_key = (llm_key_input or "").strip()
             if use_llm and not resolved_key:
                 resolved_key = store.get_secret(store.llm_secret_key(provider)) or ""
-            if use_llm and (preset.needs_key) and not resolved_key:
+            if use_llm and preset.needs_key and not resolved_key:
                 st.error("请填写 API Key（或先成功保存过一次）")
                 st.stop()
 
-            # Persist provider / model / key (encrypted) on submit
             store.save_llm_settings(
                 provider=provider,
                 api_key=llm_key_input if (llm_key_input or "").strip() else None,
@@ -223,47 +226,33 @@ def page_collect() -> None:
                 replace_key=bool((llm_key_input or "").strip()),
             )
 
-            with st.spinner("正在分析…"):
-                result = PublicAnalysisService().run(
-                    mode=mode,
-                    keywords=keywords,
-                    research_brief=brief,
-                    upload_paths=paths or None,
-                    collector_ids=collector_ids or None,
-                    anonymous_id=st.session_state.anonymous_id,
-                    llm_api_key=resolved_key or None,
-                    llm_base_url=llm_base or None,
-                    llm_model=llm_model or None,
-                    use_llm=use_llm,
-                )
-            st.session_state["last_report"] = result
-            if result.get("status") == "empty":
-                st.warning(result.get("message"))
-            else:
-                st.success("完成。请打开左侧「分析报告」。")
+            upload_files = None
+            if mode == "upload" and uploaded:
+                upload_files = [(f.name, f.getvalue()) for f in uploaded]
+
+            job_id = submit_public_analysis(
+                mode=mode,
+                keywords=keywords,
+                research_brief=brief,
+                collector_ids=collector_ids or None,
+                anonymous_id=st.session_state.anonymous_id,
+                upload_files=upload_files,
+                use_llm=use_llm,
+                llm_provider=provider,
+                llm_base_url=llm_base or None,
+                llm_model=llm_model or None,
+            )
+            st.session_state["job_id"] = job_id
+            st.session_state.pop("last_report", None)
+            st.success("任务已提交，正在后台运行。可切换到「分析报告」查看进度，离开本页不会中断。")
         except Exception as exc:  # noqa: BLE001
             st.error(str(exc))
-        finally:
-            if tmp_dir and tmp_dir.exists():
-                for p in tmp_dir.glob("*"):
-                    p.unlink(missing_ok=True)
-                try:
-                    tmp_dir.rmdir()
-                except OSError:
-                    pass
 
 
-def page_report() -> None:
-    st.markdown('<p class="page-title">分析报告</p>', unsafe_allow_html=True)
-    result = st.session_state.get("last_report")
-    if not result:
-        st.info("还没有报告。请先到「数据采集」上传或采集后生成。")
-        return
-
+def _render_result(result: dict) -> None:
     if result.get("status") == "empty":
         st.warning(result.get("message") or "未采集到数据")
         return
-
     if not result.get("report"):
         st.warning("报告数据不完整，请重新生成。")
         return
@@ -348,6 +337,52 @@ def page_report() -> None:
             )
         except Exception as exc:  # noqa: BLE001
             st.error(f"PDF 导出失败：{exc}")
+
+
+@st.fragment(run_every=timedelta(seconds=2))
+def _poll_active_job(anonymous_id: str) -> None:
+    job = latest_job(anonymous_id)
+    if not job:
+        return
+    st.caption(f"任务 {job['job_id'][:8]}… · 状态：{job['status']}")
+    if job["status"] in {"queued", "running"}:
+        st.info(job.get("message") or "后台处理中，请稍候…")
+        st.progress(0.55 if job["status"] == "running" else 0.2, text=job.get("message") or "")
+        return
+    # Finished while polling → full page rerun to render static result
+    st.session_state["job_id"] = job["job_id"]
+    if job.get("result") is not None:
+        st.session_state["last_report"] = job["result"]
+    st.rerun()
+
+
+def page_report() -> None:
+    st.markdown('<p class="page-title">分析报告</p>', unsafe_allow_html=True)
+    job = latest_job(st.session_state.anonymous_id)
+    if not job:
+        st.info("还没有报告。请先到「数据采集」提交分析任务。")
+        return
+
+    if job["status"] in {"queued", "running"}:
+        _poll_active_job(st.session_state.anonymous_id)
+        return
+
+    st.caption(f"任务 {job['job_id'][:8]}… · 状态：{job['status']}")
+    if job["status"] == "failed":
+        st.error(job.get("error_message") or job.get("message") or "任务失败")
+        return
+
+    result = job.get("result") or st.session_state.get("last_report")
+    if not result:
+        st.warning("任务已结束但没有报告数据。")
+        return
+    st.session_state["last_report"] = result
+    st.session_state["job_id"] = job["job_id"]
+    if job["status"] == "empty":
+        st.warning(result.get("message") or job.get("message") or "未采集到数据")
+        return
+    st.success(job.get("message") or "分析完成")
+    _render_result(result)
 
 
 nav = st.navigation(
