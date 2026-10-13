@@ -65,8 +65,12 @@ class Settings:
         self.asr_model_size: str = str(
             os.environ.get("INSIGHT_ASR_MODEL") or media.get("asr_model_size", "tiny")
         )
-        self.asr_device: str = str(media.get("asr_device", "cpu"))
-        self.asr_compute_type: str = str(media.get("asr_compute_type", "int8"))
+        self.asr_device: str = str(
+            os.environ.get("INSIGHT_ASR_DEVICE") or media.get("asr_device", "cpu")
+        )
+        self.asr_compute_type: str = str(
+            os.environ.get("INSIGHT_ASR_COMPUTE") or media.get("asr_compute_type", "int8")
+        )
         self.asr_language: str | None = media.get("asr_language", "zh")
         self.asr_download_root: Path = self.models_dir / "faster-whisper"
 

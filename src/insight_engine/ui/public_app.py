@@ -280,9 +280,45 @@ def _render_result(result: dict) -> None:
 
     lit = narrative.get("literature_commonality") or []
     if lit:
-        st.markdown("#### 文献 / 样本共性")
+        st.markdown("#### 文献共性")
         for x in lit:
             st.markdown(f"- {x}")
+    diffs = narrative.get("literature_differences") or []
+    if diffs:
+        st.markdown("#### 文献差异")
+        for x in diffs:
+            st.markdown(f"- {x}")
+    innov = narrative.get("literature_innovations") or []
+    if innov:
+        st.markdown("#### 创新点线索")
+        for x in innov:
+            st.markdown(f"- {x}")
+
+    table = narrative.get("literature_table") or []
+    if table:
+        st.markdown("#### 文献拆解表")
+        st.dataframe(table, width="stretch", hide_index=True)
+        csv_path = narrative.get("literature_csv") or (
+            (result.get("report_paths") or {}).get("literature_csv")
+        )
+        if csv_path and Path(str(csv_path)).exists():
+            st.download_button(
+                "导出文献拆解 CSV",
+                data=Path(str(csv_path)).read_bytes(),
+                file_name="literature_breakdown.csv",
+                mime="text/csv",
+                width="stretch",
+            )
+        else:
+            from insight_engine.product.literature import literature_rows_to_csv
+
+            st.download_button(
+                "导出文献拆解 CSV",
+                data=literature_rows_to_csv(table),
+                file_name="literature_breakdown.csv",
+                mime="text/csv",
+                width="stretch",
+            )
 
     left, right = st.columns(2)
     with left:

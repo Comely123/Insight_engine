@@ -20,11 +20,15 @@ def content_hash(
 
 
 def find_duplicate_id(conn: sqlite3.Connection, hash_value: str) -> str | None:
+    """Find an active (non-ephemeral) canonical document with the same hash."""
     row = conn.execute(
         """
         SELECT document_id
         FROM documents
-        WHERE content_hash = ? AND is_duplicate = 0
+        WHERE content_hash = ?
+          AND is_duplicate = 0
+          AND COALESCE(processing_status, '') != 'analyzed_ephemeral'
+          AND COALESCE(normalized_content, '') != '[ephemeral:cleared]'
         ORDER BY created_at ASC
         LIMIT 1
         """,

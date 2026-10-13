@@ -22,6 +22,10 @@ from insight_engine.media.subtitles import load_subtitle_file
 from insight_engine.models.documents import PermissionStatus
 from insight_engine.ops.ephemeral import delete_path_quietly, wipe_raw_document_bodies
 from insight_engine.ops.logging_util import get_logger
+from insight_engine.product.literature import (
+    analyze_literature_batch,
+    write_literature_csv,
+)
 from insight_engine.product.narrative import (
     build_rule_narrative,
     enrich_narrative_with_llm,
@@ -341,11 +345,15 @@ class PublicAnalysisService:
                     "report": None,
                 }
 
-            # Analyze (rules always; LLM optional)
+            # Per-doc: rules only (fast). LLM used once later for narrative enrichment.
             analysis = AnalysisService(conn, llm=llm).analyze_documents(
                 document_ids=doc_ids,
-                use_llm=use_llm,
+                use_llm=False,
+                include_duplicates=False,
             )
+
+            # Literature / batch breakdown BEFORE wipe (needs text bodies)
+            lit = analyze_literature_batch(conn, doc_ids)
 
             # Project-scoped report
             research = ResearchWorkbenchService(conn, self.settings)
@@ -360,13 +368,13 @@ class PublicAnalysisService:
                 change_note="public product auto",
             )
             project_id = created["project_id"]
-            # Restrict to ingested docs via keyword filter; also pass ids into metrics
             trend = compute_trend_metrics(
                 conn,
-                window_days=window_days,
+                window_days=max(window_days, 3650),
                 document_ids=doc_ids,
                 project_id=project_id,
                 persist=True,
+                ignore_time_window=True,
             )
             alerts = generate_alerts(conn, trend, project_id=project_id, run_id=None)
             project = research.repo.get_project(project_id)
@@ -386,10 +394,12 @@ class PublicAnalysisService:
                 trend=trend.to_dict(),
                 alerts=[a.model_dump() for a in alerts],
                 mode=mode,
+                literature=lit,
             )
             if use_llm:
                 narrative = enrich_narrative_with_llm(narrative, llm=llm)
             report_payload["public_narrative"] = narrative
+            report_payload["literature"] = lit
 
             out_dir = self.settings.data_dir / "exports" / "public_reports" / session_id
             paths = export_report(
@@ -398,6 +408,12 @@ class PublicAnalysisService:
             public_md = out_dir / "public_narrative.md"
             public_md.write_text(narrative_to_markdown(narrative), encoding="utf-8")
             paths["public_markdown"] = public_md
+            if lit.get("rows"):
+                csv_path = write_literature_csv(
+                    lit["rows"], out_dir / "literature_breakdown.csv"
+                )
+                paths["literature_csv"] = csv_path
+                narrative["literature_csv"] = str(csv_path)
 
             # Ephemeral wipe of raw bodies
             wiped = wipe_raw_document_bodies(conn, doc_ids)

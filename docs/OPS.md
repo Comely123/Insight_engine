@@ -44,6 +44,8 @@ python scripts\check_media_deps.py
 - 系统：FFmpeg 必须（PATH 上有 `ffmpeg`/`ffprobe`）
 - 模型缓存：`data/models/faster-whisper`（gitignore）
 - 环境变量：`INSIGHT_ASR_ENABLED=1`、`INSIGHT_ASR_MODEL=tiny`（见 `.env.example`）
+- GPU 加速 ASR（需本机 NVIDIA + CUDA 版依赖）：`INSIGHT_ASR_DEVICE=cuda`、`INSIGHT_ASR_COMPUTE=float16`
+- 文献/文本分析加速：公开流水线逐篇不走大模型，仅汇总阶段调用一次 LLM
 
 ## 媒体重复处理保护
 

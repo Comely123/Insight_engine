@@ -64,6 +64,7 @@ def build_rule_narrative(
     trend: dict[str, Any],
     alerts: list[dict[str, Any]],
     mode: str,
+    literature: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     unique = int(trend.get("unique_documents") or 0)
     sources = int(trend.get("independent_sources") or 0)
@@ -72,8 +73,15 @@ def build_rule_narrative(
     stance = trend.get("stance_counts") or {}
     prices = trend.get("price_values") or []
     buckets = trend.get("price_buckets") or {}
+    lit_rows = (literature or {}).get("rows") or []
+    is_literature = bool(lit_rows) or any(
+        "pdf" in str(x).lower() or "literature" in str(x).lower()
+        for x in (_doc_titles(conn, document_ids) if document_ids else [])
+    )
 
-    if unique < 5 or sources <= 1:
+    if is_literature and lit_rows:
+        tier = f"文献批次分析：共 {len(lit_rows)} 篇，已拆解共性 / 差异 / 创新线索"
+    elif unique < 5 or sources <= 1:
         tier = "样本不足：仅能看作零星线索，尚不足以支撑规模化判断"
     elif behavior.get("payment", 0) + behavior.get("fulfillment", 0) > 0 and sources >= 3:
         tier = "已出现付款/履约类证据，但仍偏小众验证阶段"
@@ -83,8 +91,13 @@ def build_rule_narrative(
         tier = "以一般讨论/兴趣表达为主，尚未形成稳定交易证据链"
 
     findings: list[str] = [
-        f"本次纳入去重样本 {unique} 条，独立来源约 {sources} 个，独立事件约 {trend.get('independent_events') or 0} 个。",
+        f"本次纳入去重样本 {unique} 条（原始纳入 {trend.get('raw_documents') or unique}），"
+        f"独立来源约 {sources} 个，独立事件约 {trend.get('independent_events') or 0} 个。",
     ]
+    if lit_rows:
+        findings.append(
+            "文献拆解已生成逐篇词表与创新线索，请下载 CSV 查看全面对照。"
+        )
     if keywords:
         findings.append("关注关键词：" + "、".join(keywords[:12]) + "。")
     if brief.strip():
@@ -121,18 +134,19 @@ def build_rule_narrative(
     if not recommendations:
         recommendations.append("保持描述性结论：区分「讨论热度」与「交易证据」，下一步优先补齐独立来源与价格履约线索。")
 
-    literature: list[str] = []
-    if titles:
-        literature.append("样本标题摘录：" + "；".join(titles[:8]))
+    lit_common = list((literature or {}).get("commonality") or [])
+    lit_diff = list((literature or {}).get("differences") or [])
+    lit_innov = list((literature or {}).get("innovations") or [])
+    if titles and not lit_common:
+        lit_common.append("样本标题摘录：" + "；".join(titles[:8]))
     if themes:
-        literature.append("结构化主题频次：" + "；".join(themes[:8]))
-    # Simple co-occurrence style note for literature batches
-    if unique >= 3 and themes:
-        literature.append(
-            "共性观察：高频主张重复出现，说明主题集中；若高频项几乎来自同一来源，需降低外推强度。"
-        )
-    elif unique >= 3:
-        literature.append("共性观察：主题标签较分散，当前更适合做探索性归纳，不宜给出单一结论。")
+        lit_common.append("结构化主题频次：" + "；".join(themes[:8]))
+
+    if is_literature:
+        recommendations = [
+            "对照 CSV：先看共现主题词，再看各篇 unique 用语，最后核验创新表述是否有方法/数据支撑。",
+            *recommendations[:3],
+        ]
 
     return {
         "one_liner": tier,
@@ -142,7 +156,10 @@ def build_rule_narrative(
         "degree_positioning": tier,
         "findings": findings,
         "recommendations": recommendations,
-        "literature_commonality": literature,
+        "literature_commonality": lit_common,
+        "literature_differences": lit_diff,
+        "literature_innovations": lit_innov,
+        "literature_table": lit_rows,
         "themes": themes,
         "sample_titles": titles,
         "stats": {
@@ -182,17 +199,31 @@ def enrich_narrative_with_llm(
         narrative["llm_enrichment"] = {"status": "skipped", "reason": "模型不可用或未填 Key"}
         return narrative
     system = (
-        "你是严谨的中文研究助理。只根据给定统计与主题做归纳，不要编造不存在的数据。"
+        "你是严谨的中文研究助理。只根据给定材料归纳，不要编造不存在的数据或引用。"
         "输出 JSON，键：summary(string), insights(array of string), "
-        "recommendations(array of string), literature_commonality(array of string)。"
+        "recommendations(array of string), literature_commonality(array of string), "
+        "literature_differences(array of string), literature_innovations(array of string)。"
     )
+    table_brief = [
+        {
+            "title": r.get("title"),
+            "top_terms": r.get("top_terms"),
+            "innovation_hints": r.get("innovation_hints"),
+            "char_count": r.get("char_count"),
+        }
+        for r in (narrative.get("literature_table") or [])[:12]
+    ]
     user = (
         f"程度定位: {narrative.get('degree_positioning')}\n"
         f"发现: {narrative.get('findings')}\n"
         f"主题: {narrative.get('themes')}\n"
         f"标题: {narrative.get('sample_titles')}\n"
         f"统计: {narrative.get('stats')}\n"
-        "请给出更充分的文字分析与可执行参考建议；若像文献批次，强调共性与分歧。"
+        f"文献拆解表摘要: {table_brief}\n"
+        f"已有共性: {narrative.get('literature_commonality')}\n"
+        f"已有差异: {narrative.get('literature_differences')}\n"
+        f"已有创新线索: {narrative.get('literature_innovations')}\n"
+        "请强化：文献共性、差异点、创新点/贡献点；并给出可执行建议。"
     )
     try:
         data = llm.complete_json(system_prompt=system, user_prompt=user, temperature=0.2)
@@ -209,6 +240,14 @@ def enrich_narrative_with_llm(
     if isinstance(data.get("literature_commonality"), list) and data["literature_commonality"]:
         narrative["literature_commonality"] = [
             str(x) for x in data["literature_commonality"] if str(x).strip()
+        ]
+    if isinstance(data.get("literature_differences"), list) and data["literature_differences"]:
+        narrative["literature_differences"] = [
+            str(x) for x in data["literature_differences"] if str(x).strip()
+        ]
+    if isinstance(data.get("literature_innovations"), list) and data["literature_innovations"]:
+        narrative["literature_innovations"] = [
+            str(x) for x in data["literature_innovations"] if str(x).strip()
         ]
     narrative["llm_enrichment"] = {"status": "ok"}
     return narrative
@@ -231,6 +270,14 @@ def narrative_to_markdown(narrative: dict[str, Any]) -> str:
     lines += ["", "## 文献/样本共性"]
     for x in narrative.get("literature_commonality") or []:
         lines.append(f"- {x}")
+    if narrative.get("literature_differences"):
+        lines += ["", "## 文献差异"]
+        for x in narrative["literature_differences"]:
+            lines.append(f"- {x}")
+    if narrative.get("literature_innovations"):
+        lines += ["", "## 创新点线索"]
+        for x in narrative["literature_innovations"]:
+            lines.append(f"- {x}")
     if narrative.get("alerts"):
         lines += ["", "## 关注点"]
         for a in narrative["alerts"]:

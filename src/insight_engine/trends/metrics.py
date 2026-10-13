@@ -101,11 +101,16 @@ def compute_trend_metrics(
     persist: bool = False,
     document_ids: Iterable[str] | None = None,
     project_id: str | None = None,
+    ignore_time_window: bool = False,
 ) -> TrendReport:
     as_of = as_of or _utc_now()
     window_start = as_of - timedelta(days=window_days)
     prior_start = window_start - timedelta(days=window_days)
     id_filter = set(document_ids) if document_ids is not None else None
+    # When caller scopes to explicit document_ids (e.g. public upload batch),
+    # do not drop docs for missing timestamps / outside window.
+    if document_ids is not None:
+        ignore_time_window = True
 
     docs = conn.execute(
         """
@@ -120,6 +125,9 @@ def compute_trend_metrics(
         if id_filter is not None and doc["document_id"] not in id_filter:
             continue
         ts = _parse_iso(doc["published_at"]) or _parse_iso(doc["collected_at"])
+        if ignore_time_window:
+            in_window.append(doc)
+            continue
         if ts is None:
             continue
         if window_start <= ts <= as_of:
@@ -168,9 +176,10 @@ def compute_trend_metrics(
     for row in claim_rows:
         if row["document_id"] not in unique_ids:
             continue
-        ts = _parse_iso(row["published_at"]) or _parse_iso(row["collected_at"])
-        if ts is None or not (window_start <= ts <= as_of):
-            continue
+        if not ignore_time_window:
+            ts = _parse_iso(row["published_at"]) or _parse_iso(row["collected_at"])
+            if ts is None or not (window_start <= ts <= as_of):
+                continue
         docs_with_claims.add(row["document_id"])
         if row["claim_type"] == "topic":
             topic_counts[row["claim_value"]] = topic_counts.get(row["claim_value"], 0) + 1
