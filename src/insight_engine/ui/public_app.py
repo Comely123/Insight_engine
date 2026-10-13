@@ -17,6 +17,7 @@ from insight_engine.collectors.registry import list_collector_cards
 from insight_engine.db.connection import initialize_database
 from insight_engine.export.pdf_report import markdown_to_pdf_bytes
 from insight_engine.llm.presets import PRESETS, preset_by_id
+from insight_engine.ops.secrets_store import SecretsStore
 from insight_engine.product.narrative import narrative_to_markdown
 from insight_engine.product.pipeline import PublicAnalysisService
 from insight_engine.ui.charts import render_distribution
@@ -119,46 +120,68 @@ def page_collect() -> None:
         placeholder="可选：说明你想关注的问题、市场范围或文献分析目标",
     )
 
-    with st.expander("模型设置"):
+    store = SecretsStore()
+    saved_provider = store.get_pref("llm.provider", "rules") or "rules"
+    provider_ids = [p.id for p in PRESETS]
+    try:
+        default_idx = provider_ids.index(saved_provider)
+    except ValueError:
+        default_idx = 0
+
+    with st.expander("模型设置", expanded=False):
         provider = st.selectbox(
             "分析模型",
-            options=[p.id for p in PRESETS],
+            options=provider_ids,
             format_func=lambda i: next(p.label for p in PRESETS if p.id == i),
-            index=0,
+            index=default_idx,
         )
         preset = preset_by_id(provider)
         assert preset is not None
+        saved = store.load_llm_settings(provider)
         use_llm = provider != "rules"
-        llm_base = preset.base_url
-        llm_model = preset.models[0] if preset.models else ""
-        llm_key = ""
+        llm_base = saved.get("base_url") or preset.base_url
+        llm_model = saved.get("model") or (preset.models[0] if preset.models else "")
+        llm_key_input = ""
+        clear_key = False
 
         if use_llm:
             if provider in {"custom", "local", "doubao"}:
-                llm_base = st.text_input("Base URL", value=preset.base_url or "")
+                llm_base = st.text_input("Base URL", value=llm_base or "")
             if provider == "custom":
-                llm_model = st.text_input("模型名", value=preset.models[0] if preset.models else "")
+                llm_model = st.text_input("模型名", value=llm_model or "")
             elif provider == "doubao":
                 llm_model = st.text_input(
                     "方舟推理接入点 / 模型 ID",
-                    value="",
+                    value=llm_model or "",
                     placeholder="ep-xxxxxxxx 或控制台给出的模型名",
                 )
             elif preset.models:
                 choices = list(preset.models) + ["（手动输入）"]
-                picked = st.selectbox("模型", choices)
+                if llm_model in choices:
+                    m_idx = choices.index(llm_model)
+                else:
+                    m_idx = len(choices) - 1
+                picked = st.selectbox("模型", choices, index=m_idx)
                 if picked == "（手动输入）":
-                    llm_model = st.text_input("自定义模型名", value=preset.models[0])
+                    llm_model = st.text_input(
+                        "自定义模型名",
+                        value=llm_model if llm_model not in preset.models else preset.models[0],
+                    )
                 else:
                     llm_model = picked
             if preset.note:
                 st.caption(preset.note)
             if preset.needs_key or provider == "local":
-                llm_key = st.text_input(
-                    "API Key（仅本次会话）",
+                if saved.get("has_api_key"):
+                    st.caption("已保存加密 API Key（数据库密文存储）。留空沿用；填写则更新。")
+                default_key = "local" if provider == "local" and not saved.get("has_api_key") else ""
+                llm_key_input = st.text_input(
+                    "API Key",
                     type="password",
-                    value="local" if provider == "local" else "",
+                    value=default_key,
+                    placeholder="已保存则留空" if saved.get("has_api_key") else "粘贴后分析时自动加密保存",
                 )
+                clear_key = st.checkbox("清除该模型已保存的 API Key", value=False)
 
     if st.button("开始分析", type="primary", width="stretch"):
         keywords = _split_keywords(keywords_raw)
@@ -181,6 +204,25 @@ def page_collect() -> None:
                 st.error("网络采集请填写关键词")
                 st.stop()
 
+            if clear_key and use_llm:
+                store.delete_secret(store.llm_secret_key(provider))
+
+            resolved_key = (llm_key_input or "").strip()
+            if use_llm and not resolved_key:
+                resolved_key = store.get_secret(store.llm_secret_key(provider)) or ""
+            if use_llm and (preset.needs_key) and not resolved_key:
+                st.error("请填写 API Key（或先成功保存过一次）")
+                st.stop()
+
+            # Persist provider / model / key (encrypted) on submit
+            store.save_llm_settings(
+                provider=provider,
+                api_key=llm_key_input if (llm_key_input or "").strip() else None,
+                model=llm_model,
+                base_url=llm_base,
+                replace_key=bool((llm_key_input or "").strip()),
+            )
+
             with st.spinner("正在分析…"):
                 result = PublicAnalysisService().run(
                     mode=mode,
@@ -189,7 +231,7 @@ def page_collect() -> None:
                     upload_paths=paths or None,
                     collector_ids=collector_ids or None,
                     anonymous_id=st.session_state.anonymous_id,
-                    llm_api_key=llm_key or None,
+                    llm_api_key=resolved_key or None,
                     llm_base_url=llm_base or None,
                     llm_model=llm_model or None,
                     use_llm=use_llm,

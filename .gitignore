@@ -6,6 +6,8 @@ env/
 # Environment and secrets
 .env
 .env.local
+data/.fernet_key
+data/**/.fernet_key
 
 # Local data
 data/insight.db

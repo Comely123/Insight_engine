@@ -55,7 +55,8 @@ python scripts\check_media_deps.py
 仅通过环境变量、本地 `.env` 或公开站会话输入（勿提交）。见 `.env.example`。
 
 - 默认自部署：`INSIGHT_LLM_BASE_URL`（默认 `http://127.0.0.1:11434/v1`）+ `INSIGHT_LLM_MODEL`
-- 可选用户自有 Key：UI 会话填写，或 `INSIGHT_LLM_API_KEY`
+- 可选用户自有 Key：UI 填写后加密存入 SQLite（`app_secrets`）；本地 Fernet 密钥：`data/.fernet_key`（gitignore）
+- 也可环境变量 `INSIGHT_LLM_API_KEY`（勿提交）
 
 ## 公开站与管理端
 

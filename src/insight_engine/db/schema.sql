@@ -356,3 +356,16 @@ CREATE TABLE IF NOT EXISTS search_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_search_sessions_created ON search_sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_search_sessions_anon ON search_sessions(anonymous_id);
+
+-- Local prefs (plaintext) + encrypted secrets (API keys). Encryption key lives in data/.fernet_key
+CREATE TABLE IF NOT EXISTS app_prefs (
+  pref_key   TEXT PRIMARY KEY,
+  pref_value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_secrets (
+  secret_key   TEXT PRIMARY KEY,
+  ciphertext   BLOB NOT NULL,
+  updated_at   TEXT NOT NULL
+);
