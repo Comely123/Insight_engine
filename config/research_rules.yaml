@@ -1,0 +1,56 @@
+# Phase 4 research rules — domain terms stay in config, not engine core.
+prompt_version: research-rules-v1
+
+# Most specific behavior stage wins (checked in order).
+behavior_stages:
+  - id: cancel_refund
+    label: 取消/退款
+    keywords: [取消, 退款, 退货, 不想要了]
+  - id: fulfillment
+    label: 服务完成/交付
+    keywords: [发货, 收货, 已交付, 制作周期, 收到, 完成交付]
+  - id: participation
+    label: 实际参与
+    keywords: [已参加, 到店, 现场参与, 已体验]
+  - id: payment
+    label: 实际付款
+    keywords: [付款, 已支付, 支付了, 下单付款]
+  - id: signup
+    label: 预约/提交报名
+    keywords: [报名, 预约, 提交订单, 已预约]
+  - id: purchase_intent
+    label: 购买或报名意向
+    keywords: [想买, 要定制, 想定制, 准备买, 打算买, 加急]
+  - id: price_inquiry
+    label: 价格咨询
+    keywords: [多少钱, 报价, 预算, 价格, 标价]
+  - id: interest
+    label: 兴趣表达
+    keywords: [了解, 收藏, 感觉, 挺有, 关注, 看看, 仪式感]
+  - id: personal_experience
+    label: 个人经历
+    keywords: [我家, 我给, 自己做了, 上次, 已经做过]
+  - id: discussion
+    label: 一般讨论
+    keywords: [讨论, 听说, 有人, 看看大家]
+  - id: unknown
+    label: 未知
+    keywords: []
+
+# Living pet blessing vs memorial after loss — kept separate.
+demand_subtypes:
+  - id: memorial
+    label: 离世后纪念
+    keywords: [离世, 去世, 纪念, 怀念, 安息, 走了, 告别]
+  - id: living_blessing
+    label: 活体祈福/陪伴
+    keywords: [祈福, 平安, 健康, 生日礼物, 掉毛, 梳毛]
+  - id: unknown
+    label: 未区分
+    keywords: []
+
+alerts:
+  growth_threshold: 0.5          # +50% vs prior window
+  min_unique_docs: 5
+  max_source_share: 0.7
+  require_source_growth: true    # warn if volume up but sources flat

@@ -1,0 +1,60 @@
+# Generic rule keywords for Phase 2. Domain terms live here, not in engine code.
+prompt_version: rules-v1
+
+topics:
+  memorial_craft:
+    label: 纪念/祈福手工
+    keywords: [祈福, 编织, 手绳, 平安结, 毛发, 纪念品, 编织物]
+  pricing:
+    label: 价格讨论
+    keywords: [价格, 报价, 预算, 元, 涨价, 标价, 加价]
+  safety_hygiene:
+    label: 安全卫生
+    keywords: [卫生, 清洁, 寄生虫, 风险, 清洗]
+  brand_news:
+    label: 品牌/企业动态
+    keywords: [品牌, 小程序, 试点, 宣布, 企业]
+  tutorial_diy:
+    label: 教程/自制
+    keywords: [教程, 自己, 免费, DIY, 做法]
+  other:
+    label: 其他
+    keywords: []
+
+# Most specific intent wins (checked in order).
+intents:
+  - id: fulfillment
+    label: 履约/交付
+    keywords: [发货, 收货, 已交付, 制作周期, 收到, 等待发货]
+  - id: payment
+    label: 付款
+    keywords: [付款, 已支付, 支付了, 下单付款, 买了]
+  - id: purchase_intent
+    label: 购买意向
+    keywords: [想买, 要定制, 预算, 加急, 想定制, 可以买, 下单]
+  - id: inquiry
+    label: 咨询
+    keywords: [请问, 有没有, 咨询, 求推荐, 多少钱, 报价, 接这种]
+  - id: interest
+    label: 兴趣表达
+    keywords: [了解, 收藏, 感觉, 挺有, 关注, 看看, 仪式感]
+  - id: unknown
+    label: 未知
+    keywords: []
+
+stance:
+  negative:
+    keywords: [不卫生, 不会买, 不愿, 不想花钱, 风险, 寄生虫, 反感]
+  positive:
+    keywords: [推荐, 好评, 值得, 有仪式感, 不错, 喜欢]
+
+price:
+  # Captures amounts like 128元, ¥99, 80-150, 80 到 150
+  patterns:
+    - '(?P<amount>\d+(?:\.\d+)?)\s*元'
+    - '[¥￥]\s*(?P<amount>\d+(?:\.\d+)?)'
+    - '(?P<low>\d+(?:\.\d+)?)\s*[-~到至]\s*(?P<high>\d+(?:\.\d+)?)\s*元?'
+
+trends:
+  min_unique_docs: 5
+  max_source_share: 0.7

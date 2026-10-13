@@ -1,0 +1,26 @@
+# Phase 3 media processing defaults (non-secret)
+allowed_extensions: [".mp4", ".mov", ".mkv", ".webm", ".mp3", ".wav", ".m4a", ".aac"]
+subtitle_extensions: [".srt", ".vtt"]
+
+max_duration_seconds: 1800
+max_file_mb: 500
+keyframe_interval_seconds: 2.0
+max_keyframes: 30
+
+# Project-local faster-whisper model cache: data/models/faster-whisper
+asr:
+  enabled_env: INSIGHT_ASR_ENABLED
+  model_size: tiny
+  device: cpu
+  compute_type: int8
+  language: zh
+  download_root_dirname: faster-whisper
+
+ocr:
+  enabled_env: INSIGHT_OCR_ENABLED
+  lang: chi_sim+eng
+  # Skip automatically if tesseract binary is missing
+
+processing:
+  prefer_subtitles_over_asr: true
+  require_explicit_confirm_for_unclear: true

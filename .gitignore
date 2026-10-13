@@ -1,0 +1,45 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment and secrets
+.env
+.env.local
+
+# Local data (keep samples tracked)
+data/insight.db
+data/insight.db-*
+data/imports/
+data/media/
+data/models/
+data/exports/
+data/backups/
+data/benchmarks/
+data/logs/
+data/*.db
+!data/samples/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+.agents/
+.claude/

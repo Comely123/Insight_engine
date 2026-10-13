@@ -1,0 +1,28 @@
+{
+  "documents": [
+    {
+      "title": "字幕摘录：毛发祈福手绳制作",
+      "content": "本期演示如何把梳下来的宠物毛梳理后编织成小型祈福结，材料成本不高，重点在清洁和固定。",
+      "original_url": "https://example.com/video/subtitle/1",
+      "published_at": "2025-11-16T10:00:00+08:00",
+      "source_name": "授权字幕样本",
+      "content_type": "subtitle"
+    },
+    {
+      "title": "咨询意向：能否加急",
+      "content": "想给家里狗做毛发祈福编织物当生日礼物，下周就要，请问能否加急，可接受加价。",
+      "url": "https://example.com/dm/ask/22",
+      "published_at": "2025-11-17",
+      "source": "私信整理",
+      "type": "text"
+    },
+    {
+      "title": "反向证据：觉得不卫生",
+      "content": "把掉毛编成饰品听着不卫生，我不会买，还是普通项圈比较好。",
+      "original_url": "https://example.com/forum/post/2002",
+      "published_at": "2025-11-18 21:00:00",
+      "source_name": "社区帖子A",
+      "content_type": "text"
+    }
+  ]
+}

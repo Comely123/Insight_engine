@@ -1,0 +1,30 @@
+app_name: Insight Engine
+data_dir: data
+db_filename: insight.db
+imports_dirname: imports
+samples_dirname: samples
+
+# Default timezone used when naive datetimes are parsed
+default_timezone: Asia/Shanghai
+
+# Dedup: normalize whitespace and lowercase before hashing
+dedup:
+  lowercase: true
+  collapse_whitespace: true
+
+search:
+  default_limit: 50
+  max_limit: 500
+
+media:
+  media_dirname: media
+  models_dirname: models
+  keyframes_subdir: keyframes
+  max_duration_seconds: 1800
+  max_file_mb: 500
+  keyframe_interval_seconds: 2.0
+  max_keyframes: 30
+  asr_model_size: tiny
+  asr_device: cpu
+  asr_compute_type: int8
+  asr_language: zh

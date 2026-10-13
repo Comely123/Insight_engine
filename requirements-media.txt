@@ -1,0 +1,9 @@
+# Optional Phase 3 media stack — install into project .venv:
+#   .\.venv\Scripts\python.exe -m pip install -r requirements-media.txt
+#
+# faster-whisper models download into: data/models/faster-whisper
+# OCR also needs system Tesseract OCR binary on PATH.
+
+faster-whisper>=1.1.0,<2
+pytesseract>=0.3.10,<1
+Pillow>=10.0.0,<13
