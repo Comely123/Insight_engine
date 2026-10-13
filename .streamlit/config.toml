@@ -1,0 +1,18 @@
+[theme]
+base = "light"
+primaryColor = "#6D9B8E"
+backgroundColor = "#F7F9F8"
+secondaryBackgroundColor = "#EEF4F2"
+textColor = "#1A1A1A"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+# Slightly snappier websocket / script interaction under load
+maxUploadSize = 200
+enableXsrfProtection = true
+
+[runner]
+fastReruns = true

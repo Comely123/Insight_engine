@@ -138,3 +138,17 @@ class SecretsStore:
             "api_key": self.get_secret(self.llm_secret_key(provider)),
             "has_api_key": self.has_secret(self.llm_secret_key(provider)),
         }
+
+    # --- Open data source helpers (literature / YouTube etc.) ---
+    def source_secret_key(self, source_id: str) -> str:
+        return f"source.api_key.{source_id}"
+
+    def save_source_api_key(self, source_id: str, api_key: str | None) -> None:
+        if api_key and api_key.strip() and api_key.strip() != "********":
+            self.set_secret(self.source_secret_key(source_id), api_key.strip())
+
+    def load_source_key_status(self, source_id: str) -> dict:
+        return {
+            "has_api_key": self.has_secret(self.source_secret_key(source_id)),
+            "api_key": self.get_secret(self.source_secret_key(source_id)),
+        }

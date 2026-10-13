@@ -12,7 +12,13 @@ def test_intent_payment_and_price_extraction():
     )
     assert result.intent == IntentLabel.PAYMENT
     assert 128.0 in result.prices
-    assert result.topic == "memorial_craft"
+    assert result.topic == "living_blessing"
+    kinds = {c.claim_type: c.claim_value for c in result.claims if c.claim_type in {
+        "content_kind", "research_topic", "behavior_stage", "demand_subtype"
+    }}
+    assert kinds.get("research_topic") == "living_blessing"
+    assert kinds.get("demand_subtype") == "living_blessing"
+    assert kinds.get("behavior_stage") == "payment"
     assert all(c.evidence for c in result.claims)
     assert all(ev.document_id == "doc-1" for c in result.claims for ev in c.evidence)
     # schema roundtrip

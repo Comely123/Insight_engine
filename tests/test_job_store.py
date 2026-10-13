@@ -25,3 +25,15 @@ def test_job_store_lifecycle(tmp_settings) -> None:
     assert latest is not None
     assert latest["status"] == "succeeded"
     assert latest["result"]["status"] == "succeeded"
+
+
+def test_job_progress_is_monotonic(tmp_settings) -> None:
+    store = JobStore(tmp_settings)
+    store.create(job_id="job-p", anonymous_id="a", mode="upload", params={})
+    store.update("job-p", status="running", progress=0.58, message="分析中")
+    store.update("job-p", status="running", progress=0.40, message="误报回退")
+    row = store.get("job-p")
+    assert row is not None
+    assert row["progress"] >= 0.58
+    store.update("job-p", status="running", progress=0.70, message="前进")
+    assert store.get("job-p")["progress"] >= 0.70

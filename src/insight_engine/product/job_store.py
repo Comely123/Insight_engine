@@ -37,9 +37,9 @@ class JobStore:
             conn.execute(
                 """
                 INSERT INTO analysis_jobs (
-                  job_id, anonymous_id, status, message, mode, params_json,
+                  job_id, anonymous_id, status, message, progress, mode, params_json,
                   result_json, error_message, created_at, updated_at, finished_at
-                ) VALUES (?, ?, 'queued', ?, ?, ?, NULL, NULL, ?, ?, NULL)
+                ) VALUES (?, ?, 'queued', ?, 0.02, ?, ?, NULL, NULL, ?, ?, NULL)
                 """,
                 (
                     job_id,
@@ -59,6 +59,7 @@ class JobStore:
         *,
         status: str | None = None,
         message: str | None = None,
+        progress: float | None = None,
         result: dict[str, Any] | None = None,
         error_message: str | None = None,
         finished: bool = False,
@@ -71,6 +72,12 @@ class JobStore:
         if message is not None:
             fields.append("message = ?")
             values.append(message)
+        resolved_progress = progress
+        if finished and resolved_progress is None:
+            if status == "failed":
+                resolved_progress = None  # keep last progress
+            else:
+                resolved_progress = 1.0
         if result is not None:
             fields.append("result_json = ?")
             values.append(json.dumps(result, ensure_ascii=False))
@@ -80,8 +87,21 @@ class JobStore:
         if finished:
             fields.append("finished_at = ?")
             values.append(_utc_now())
-        values.append(job_id)
+
         with self._conn() as conn:
+            if resolved_progress is not None:
+                new_p = max(0.0, min(1.0, float(resolved_progress)))
+                # Never move the bar backwards while a job is in flight
+                if not finished and status != "failed":
+                    cur = conn.execute(
+                        "SELECT progress FROM analysis_jobs WHERE job_id = ?",
+                        (job_id,),
+                    ).fetchone()
+                    if cur is not None and cur["progress"] is not None:
+                        new_p = max(float(cur["progress"]), new_p)
+                fields.append("progress = ?")
+                values.append(new_p)
+            values.append(job_id)
             conn.execute(
                 f"UPDATE analysis_jobs SET {', '.join(fields)} WHERE job_id = ?",
                 values,
@@ -131,4 +151,8 @@ class JobStore:
         d["params"] = json.loads(d.pop("params_json") or "{}")
         raw = d.pop("result_json")
         d["result"] = json.loads(raw) if raw else None
+        try:
+            d["progress"] = float(d.get("progress") or 0.0)
+        except (TypeError, ValueError):
+            d["progress"] = 0.0
         return d

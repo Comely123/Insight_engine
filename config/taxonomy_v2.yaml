@@ -1,0 +1,119 @@
+# Batch B — three independent dimensions. Do NOT merge these labels.
+# Unknown is allowed and preferred over forced classification.
+prompt_version: taxonomy-v2
+
+# Dimension 1: content form / genre (文体/渠道形态), NOT demand.
+content_kinds:
+  # Order matters for first-hit matching; report genres listed before academic
+  # so a「市场调研报告」with one「摘要」is not forced into literature.
+  - id: inspection_report
+    label: 检验/检测报告
+    keywords: [检验报告, 检测报告, 质检, 抽检, 送检, 检验结论, 检测结果, 不合格项]
+  - id: survey_report
+    label: 调查/问卷报告
+    keywords: [调查报告, 问卷调查, 有效问卷, 回收率, 访谈提纲, 焦点小组, questionnaire]
+  - id: market_report
+    label: 市场/行业报告
+    keywords: [市场调研, 市场分析, 市场规模, 行业报告, 竞争格局, 渗透率, 市场份额, 竞品分析, 付费意愿]
+  - id: academic
+    label: 学术论文
+    keywords: [doi, references, et al, journal, proceedings, 参考文献, arxiv, pubmed, peer-reviewed]
+  - id: news
+    label: 新闻报道
+    keywords: [记者, 报道, 讯, 据悉, 本报, 通讯员, breaking, reuters]
+  - id: video_meta
+    label: 视频元数据
+    keywords: [youtube, 订阅, 播放量, "watch?v="]
+  - id: activity_page
+    label: 活动页面
+    keywords: [活动报名, 报名截止, 活动时间, 主办方, 义工, 场次]
+  - id: product_page
+    label: 商品页面
+    keywords: [加入购物车, 立即购买, sku, 规格, 包邮, 现货]
+  - id: consumer_comment
+    label: 消费者评论
+    keywords: [收到了, 好评, 差评, 回购, 五星, 晒单, 种草]
+  - id: unknown
+    label: 未知文体
+    keywords: []
+
+# Map ingest content_type → content_kind hint (weak prior only).
+# PDF/DOCX format alone must NOT imply academic.
+content_type_hints:
+  literature: academic
+  academic_document: academic
+  market_report: market_report
+  survey_report: survey_report
+  inspection_report: inspection_report
+  # bare pdf/document/literature_pdf: no academic forced hint
+  rss: news
+  video_meta: video_meta
+  subtitle: video_meta
+  media_stub: video_meta
+  image_ocr: news
+  source_code: news
+  text: news
+  csv: news
+  json: news
+
+# Dimension 2: research topic (研究对象主题). Souvenir ≠ memorial demand.
+research_topics:
+  - id: memorial
+    label: 离世纪念
+    # Require loss/death cues — "纪念" alone is not enough.
+    keywords: [离世, 去世, 逝世, 走了, 告别, 安息, 骨灰, 殡葬, 身后, 怀念已故]
+    require_any: [离世, 去世, 逝世, 走了, 告别, 安息, 骨灰, 殡葬, 身后]
+  - id: living_blessing
+    label: 活体祈福
+    keywords: [祈福, 平安符, 活体, 掉毛, 梳毛, 生日礼物, 健康祈福, 毛发祈福]
+  - id: pet_funeral
+    label: 宠物殡葬
+    keywords: [宠物殡葬, 火化, 骨灰盒, 宠物墓地, 安乐死仪式]
+  - id: souvenir
+    label: 纪念品/手工
+    keywords: [纪念品, 手绳, 编织, 平安结, 编织物, 毛发手链, DIY]
+  - id: religious_ritual
+    label: 宗教仪式
+    keywords: [寺庙, 放生, 法事, 诵经, 供养, 开光]
+  - id: unrelated
+    label: 无关内容
+    keywords: []
+  - id: unknown
+    label: 主题未知
+    keywords: []
+
+# Signals that the text is at least pet/blessing-adjacent (else may mark unrelated for academic/news)
+domain_anchor_keywords: [宠物, 猫, 狗, 毛孩, 毛发, 祈福, 殡葬, 手绳, 养宠, pet, dog, cat]
+
+# Dimension 3: behavior stage (交易/行为证据链). Stance/neutrality ≠ intent.
+behavior_stages:
+  - id: cancel_refund
+    label: 取消或退款
+    keywords: [取消, 退款, 退货, 不想要了]
+  - id: fulfillment
+    label: 履约/交付
+    keywords: [发货, 收货, 已交付, 制作周期, 完成交付, 收到货]
+  - id: participation
+    label: 参与活动
+    keywords: [已参加, 到店, 现场参与, 已体验]
+  - id: payment
+    label: 付款
+    keywords: [付款, 已支付, 支付了, 下单付款, 付了钱]
+  - id: signup
+    label: 报名
+    keywords: [报名, 预约, 提交订单, 已预约]
+  - id: purchase_intent
+    label: 明确意向
+    keywords: [想买, 要定制, 想定制, 准备买, 打算买, 加急]
+  - id: price_inquiry
+    label: 询价
+    keywords: [多少钱, 报价, 什么价, 请问价格]
+  - id: interest
+    label: 兴趣表达
+    keywords: [想了解, 收藏了, 挺有仪式感, 关注一下]
+  - id: discussion
+    label: 一般讨论
+    keywords: [讨论, 听说, 有人做过, 大家怎么看]
+  - id: unknown
+    label: 行为未知
+    keywords: []

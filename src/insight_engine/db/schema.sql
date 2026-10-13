@@ -376,6 +376,7 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
   anonymous_id   TEXT,
   status         TEXT NOT NULL,
   message        TEXT,
+  progress       REAL NOT NULL DEFAULT 0,
   mode           TEXT NOT NULL,
   params_json    TEXT NOT NULL,
   result_json    TEXT,

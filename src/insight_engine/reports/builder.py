@@ -74,8 +74,20 @@ def build_research_report(
     ok, errors = validate_citations(conn, citations)
 
     facts = [
-        f"去重文档数={report.unique_documents}（原始={report.raw_documents}）",
-        f"独立来源={report.independent_sources}，独立事件键={report.independent_events}",
+        (
+            f"原始={report.raw_documents}，保留={report.unique_documents}，"
+            f"精确重复={report.duplicate_documents}，"
+            f"保留率={report.retention_rate}，去重删除率={report.dedup_deletion_rate}"
+        ),
+        (
+            f"采集平台={getattr(report, 'platform_count', report.independent_sources)}，"
+            f"域名={getattr(report, 'domain_count', '—')}，"
+            f"独立事件键={report.independent_events}（非已核验现实事件）"
+        ),
+        (
+            f"已确认价格样本={len(report.price_values)}，"
+            f"待审核金额={len(getattr(report, 'price_pending_review', []) or [])}"
+        ),
         f"窗口={report.window_days}日，as_of={report.as_of}",
     ]
     inferences = [
@@ -153,29 +165,44 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "- 本地导入文本/媒体 + 规则/可选模型分析（见库内 sources）。",
         "",
         "## 3. 样本数量与时间覆盖",
-        f"- 去重文档：{payload['data_scope']['sample_unique_docs']}",
+        f"- 最终保留文档：{payload['data_scope']['sample_unique_docs']}",
         f"- 原始文档：{payload['data_scope']['sample_raw_docs']}",
+        f"- 样本保留率：{payload['metrics'].get('retention_rate')}",
+        f"- 去重删除率：{payload['metrics'].get('dedup_deletion_rate')}",
         f"- 窗口：{payload['data_scope']['window_days']} 日，as_of={payload['data_scope']['as_of']}",
         "",
         "## 4. 清洗和去重口径",
         f"- {payload['data_scope']['dedup_policy']}",
+        "- 保留率≠去重率；去重删除率=(原始-保留)/原始；无近似重复/转载检测时不得推断转载占比。",
         f"- 关键词版本：v{payload['keyword_version'].get('version_number')}",
         f"- 关键词：{payload['keyword_version'].get('keywords')}",
         "",
-        "## 5. 需求类别和行为阶段",
-        f"- behavior_stage：{payload['metrics'].get('behavior_stage_counts')}",
-        f"- demand_subtype：{payload['metrics'].get('demand_subtype_counts')}",
+        "## 5. 分类三维（Batch B）",
+        f"- content_kind（文体）：{payload['metrics'].get('content_kind_counts')}",
+        f"- research_topic（主题）：{payload['metrics'].get('research_topic_counts')}",
+        f"- behavior_stage（行为）：{payload['metrics'].get('behavior_stage_counts')}",
+        f"- demand_subtype（兼容映射）：{payload['metrics'].get('demand_subtype_counts')}",
         f"- intent（兼容）：{payload['metrics'].get('intent_counts')}",
+        f"- 冲突提示：{payload['metrics'].get('taxonomy_conflict_notes')}",
+        "",
+        "## 5b. 相关度与创新（Batch C）",
+        f"- relevance（四档）：{payload['metrics'].get('relevance_counts')}",
+        f"- innovation（门控+实质证据）：{payload['metrics'].get('innovation_counts')}",
+        "- 创新仅在 relevance=direct|edge 时计入；无关/待审文献的创新措辞忽略。",
         "",
         "## 6. 趋势指标与变化",
-        f"- 独立来源：{payload['metrics'].get('independent_sources')}",
-        f"- 独立事件：{payload['metrics'].get('independent_events')}",
+        f"- 采集平台数：{payload['metrics'].get('platform_count')}",
+        f"- 域名数：{payload['metrics'].get('domain_count')}",
+        f"- 平台分布：{payload['metrics'].get('platform_counts')}",
+        f"- 域名分布：{payload['metrics'].get('domain_counts')}",
+        f"- 独立事件键：{payload['metrics'].get('independent_events')}",
         f"- 增长率：{payload['metrics'].get('growth_rate')}",
         f"- 主题：{payload['metrics'].get('topic_counts')}",
         "",
         "## 7. 价格和交易证据",
-        f"- 价格样本：{payload['metrics'].get('price_values')}",
-        f"- 价格区间：{payload['metrics'].get('price_buckets')}",
+        f"- 已确认价格：{payload['metrics'].get('price_values')}",
+        f"- 已确认价格区间：{payload['metrics'].get('price_buckets')}",
+        f"- 待审核金额（未入分布）：{payload['metrics'].get('price_pending_review')}",
         "",
         "## 8. 正向证据",
     ]

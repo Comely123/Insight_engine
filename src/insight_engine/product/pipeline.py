@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import tempfile
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+ProgressCb = Callable[[float, str], None]
 
 from insight_engine.analysis.pipeline import AnalysisService
 from insight_engine.collectors.registry import get_collector
@@ -31,6 +34,12 @@ from insight_engine.product.narrative import (
     enrich_narrative_with_llm,
     narrative_to_markdown,
 )
+from insight_engine.product.archive_expand import expand_archives
+from insight_engine.product.doc_genre import (
+    classify_document_genre,
+    genre_to_content_type,
+)
+from insight_engine.product.file_extract import extract_upload_text
 from insight_engine.product.pdf_extract import extract_pdf_text
 from insight_engine.product.uploads import pair_captions
 from insight_engine.reports.builder import build_research_report, export_report
@@ -67,7 +76,16 @@ class PublicAnalysisService:
         llm_model: str | None = None,
         use_llm: bool = False,
         window_days: int = 90,
+        on_progress: ProgressCb | None = None,
     ) -> dict[str, Any]:
+        def _progress(pct: float, msg: str) -> None:
+            if on_progress is None:
+                return
+            try:
+                on_progress(max(0.0, min(0.99, float(pct))), msg)
+            except Exception:  # noqa: BLE001
+                pass
+
         keywords = [k.strip() for k in keywords if k.strip()]
         if mode == "collect" and not keywords:
             raise ValueError("网络采集请填写至少一个关键词")
@@ -76,6 +94,7 @@ class PublicAnalysisService:
         collector_ids = collector_ids or (
             ["news_search_rss"] if mode == "collect" else []
         )
+        _progress(0.06, "准备任务…")
 
         base = (llm_base_url or "").lower()
         prefer_local = use_llm and not (llm_api_key or "").strip() and (
@@ -99,72 +118,59 @@ class PublicAnalysisService:
         doc_ids: list[str] = []
         ingest_notes: list[str] = []
         temp_files: list[Path] = []
+        # Public uploads: dedupe only within this run (re-upload same PDFs must stay analyzable).
+        upload_session_peers: list[str] = []
 
         with get_connection() as conn:
             importer = ImportService(conn, self.settings)
 
             if mode == "upload":
+                _progress(0.10, "正在导入上传文件…")
                 if not upload_paths:
                     raise ValueError("请上传至少一个文件")
-                text_paths, media_paths, media_caption_map, unsupported = pair_captions(
-                    [Path(p) for p in upload_paths]
-                )
-                for path in unsupported:
-                    ingest_notes.append(f"{path.name}: 不支持的文件类型，已跳过")
 
-                for path in text_paths:
-                    import_path = path
-                    try:
-                        if path.suffix.lower() in {".srt", ".vtt"}:
-                            cues = load_subtitle_file(path)
-                            body = "\n".join(c.text for c in cues if c.text)
-                            if not body.strip():
-                                ingest_notes.append(f"{path.name}: 字幕为空")
-                                continue
-                            content_type = "subtitle"
-                            title = path.name
-                        elif path.suffix.lower() == ".pdf":
-                            body = extract_pdf_text(path)
-                            content_type = "literature_pdf"
-                            title = path.stem
-                        else:
-                            body = None
-                            content_type = None
-                            title = path.name
-
-                        if body is not None:
-                            tmp = Path(tempfile.mkdtemp(prefix="insight_doc_")) / f"{path.stem}.json"
-                            tmp.write_text(
-                                json.dumps(
+                def _import_body(
+                    *,
+                    title: str,
+                    body: str,
+                    content_type: str,
+                    source_label: str,
+                ) -> None:
+                    nonlocal doc_ids
+                    tmp = (
+                        Path(tempfile.mkdtemp(prefix="insight_doc_"))
+                        / f"{Path(source_label).stem or 'doc'}.json"
+                    )
+                    tmp.write_text(
+                        json.dumps(
+                            {
+                                "documents": [
                                     {
-                                        "documents": [
-                                            {
-                                                "title": title,
-                                                "content": body,
-                                                "source_name": f"upload:{path.name}",
-                                                "content_type": content_type,
-                                            }
-                                        ]
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                                encoding="utf-8",
-                            )
-                            temp_files.append(tmp)
-                            import_path = tmp
-                    except Exception as exc:  # noqa: BLE001
-                        ingest_notes.append(f"{path.name}: 解析失败 {exc}")
-                        continue
-
+                                        "title": title,
+                                        "content": body,
+                                        "source_name": f"upload:{source_label}",
+                                        "content_type": content_type,
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        ),
+                        encoding="utf-8",
+                    )
+                    temp_files.append(tmp)
                     result = importer.import_file(
-                        import_path,
-                        source_name=f"upload:{path.name}",
+                        tmp,
+                        source_name=f"upload:{source_label}",
                         permission_status=PermissionStatus.USER_OWNED,
                         license_note="User upload via public product",
                         save_copy=False,
+                        dedupe_scope="session",
+                        session_document_ids=upload_session_peers,
                     )
                     ingest_notes.append(
-                        f"{path.name}: imported={result.row_count_imported} status={result.status}"
+                        f"{source_label}: imported={result.row_count_imported} "
+                        f"dupes={result.row_count_dupes} status={result.status} "
+                        f"type={content_type}"
                     )
                     rows = conn.execute(
                         "SELECT document_id FROM documents WHERE batch_id = ?",
@@ -172,11 +178,88 @@ class PublicAnalysisService:
                     ).fetchall()
                     doc_ids.extend(r["document_id"] for r in rows)
 
+                # 1) Expand archives → flat file list
+                flat_paths, arch_notes, arch_temps = expand_archives(
+                    [Path(p) for p in upload_paths]
+                )
+                ingest_notes.extend(arch_notes)
+                temp_files.extend(arch_temps)
+
+                (
+                    extractable_paths,
+                    image_paths,
+                    media_paths,
+                    media_caption_map,
+                    unsupported,
+                ) = pair_captions(flat_paths)
+                for path in unsupported:
+                    ingest_notes.append(f"{path.name}: 暂无法解析的类型，已跳过")
+
+                work_list = list(extractable_paths) + list(image_paths)
+                n_work = max(len(work_list), 1)
+                for i, path in enumerate(work_list):
+                    try:
+                        _progress(
+                            0.12 + 0.26 * (i / n_work),
+                            f"解析文件 {i + 1}/{len(work_list)}：{path.name}",
+                        )
+                        if path.suffix.lower() in {".srt", ".vtt"}:
+                            cues = load_subtitle_file(path)
+                            body = "\n".join(c.text for c in cues if c.text)
+                            if not body.strip():
+                                ingest_notes.append(f"{path.name}: 字幕为空")
+                                continue
+                            _import_body(
+                                title=path.name,
+                                body=body,
+                                content_type="subtitle",
+                                source_label=path.name,
+                            )
+                            continue
+                        if path.suffix.lower() == ".pdf":
+                            body = extract_pdf_text(path)
+                            genre = classify_document_genre(body, title=path.stem)
+                            ctype = genre_to_content_type(genre)
+                            ingest_notes.append(
+                                f"{path.name}: PDF 按正文判定为 {genre}（非扩展名）→ {ctype}"
+                            )
+                            _import_body(
+                                title=path.stem,
+                                body=body,
+                                content_type=ctype,
+                                source_label=path.name,
+                            )
+                            continue
+
+                        body, content_type, meta = extract_upload_text(path)
+                        if not (body or "").strip():
+                            ingest_notes.append(f"{path.name}: 无提取文本")
+                            continue
+                        if meta.get("extractor") == "ocr_unavailable":
+                            ingest_notes.append(
+                                f"{path.name}: OCR 未启用（需 Tesseract），已写入占位说明"
+                            )
+                        _import_body(
+                            title=path.stem or path.name,
+                            body=body,
+                            content_type=content_type,
+                            source_label=path.name,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        ingest_notes.append(f"{path.name}: 解析失败 {exc}")
+                        continue
+
                 media_svc = MediaIngestService(conn, self.settings)
                 media_pipe = MediaPipeline(conn, self.settings)
                 asr_ok = get_asr_provider().available()
-                for path in media_paths:
+                n_media = max(len(media_paths), 1)
+                for mi, path in enumerate(media_paths):
                     try:
+                        _progress(
+                            0.40 + 0.10 * (mi / n_media),
+                            f"处理媒体 {mi + 1}/{len(media_paths)}：{path.name}"
+                            + ("（ASR 转写中，较耗时）" if asr_ok else ""),
+                        )
                         asset = media_svc.import_media(
                             path,
                             permission_status=PermissionStatus.USER_OWNED,
@@ -185,6 +268,7 @@ class PublicAnalysisService:
                             copy_into_media_dir=True,
                             subtitle_path=media_caption_map.get(path),
                         )
+                        # Still-image OCR is handled above; skip video keyframe OCR here (too slow).
                         proc = media_pipe.process_media(
                             asset["media_id"],
                             run_asr=asr_ok,
@@ -233,6 +317,8 @@ class PublicAnalysisService:
                                 permission_status=PermissionStatus.USER_OWNED,
                                 license_note="Media stub without transcript",
                                 save_copy=False,
+                                dedupe_scope="session",
+                                session_document_ids=upload_session_peers,
                             )
                             rows = conn.execute(
                                 "SELECT document_id FROM documents WHERE batch_id = ?",
@@ -252,12 +338,20 @@ class PublicAnalysisService:
             elif mode == "collect":
                 # Write collected items to a temp JSON then import
                 collected_docs = []
-                for cid in collector_ids:
+                n_src = max(len(collector_ids), 1)
+                _progress(0.10, "开始公开网络采集…")
+                for si, cid in enumerate(collector_ids):
                     collector = get_collector(cid)
                     if collector is None:
                         ingest_notes.append(f"{cid}: unknown collector")
                         continue
-                    cres = collector.collect(keywords, limit=80)
+                    _progress(
+                        0.10 + 0.35 * (si / n_src),
+                        f"采集中 {si + 1}/{len(collector_ids)}：{collector.display_name}",
+                    )
+                    # Cap per source to keep multi-API runs bounded
+                    per_limit = 40 if getattr(collector, "source_kind", "") == "official_api" else 80
+                    cres = collector.collect(keywords, limit=per_limit)
                     ingest_notes.append(
                         f"{collector.display_name}: status={cres.status} items={len(cres.items)}"
                     )
@@ -305,6 +399,7 @@ class PublicAnalysisService:
                     encoding="utf-8",
                 )
                 temp_files.append(tmp)
+                _progress(0.48, f"写入采集结果（{len(collected_docs)} 条）…")
                 result = importer.import_file(
                     tmp,
                     source_name="collector_bundle",
@@ -320,6 +415,7 @@ class PublicAnalysisService:
             else:
                 raise ValueError("mode 必须是 upload 或 collect")
 
+            _progress(0.52, f"样本就绪 {len(doc_ids)} 条，开始规则分析…")
             if not doc_ids:
                 SessionRepository(conn).insert_session(
                     {
@@ -346,16 +442,26 @@ class PublicAnalysisService:
                 }
 
             # Per-doc: rules only (fast). LLM used once later for narrative enrichment.
+            _progress(0.58, "抽取主题 / 行为 / 价格证据…")
             analysis = AnalysisService(conn, llm=llm).analyze_documents(
                 document_ids=doc_ids,
                 use_llm=False,
                 include_duplicates=False,
+                research_keywords=keywords,
+                research_brief=brief,
             )
 
             # Literature / batch breakdown BEFORE wipe (needs text bodies)
-            lit = analyze_literature_batch(conn, doc_ids)
+            _progress(0.70, "样本对照（共性 / 差异 / 亮点）…")
+            lit = analyze_literature_batch(
+                conn,
+                doc_ids,
+                research_keywords=keywords,
+                research_brief=brief,
+            )
 
             # Project-scoped report
+            _progress(0.78, "汇总指标与来源结构…")
             research = ResearchWorkbenchService(conn, self.settings)
             created = research.create_project(
                 name=f"公开检索 {session_id[:8]}",
@@ -386,6 +492,7 @@ class PublicAnalysisService:
                 report=trend,
                 alerts=[a.model_dump() for a in alerts],
             )
+            _progress(0.84, "生成报告叙事…")
             narrative = build_rule_narrative(
                 conn=conn,
                 document_ids=doc_ids,
@@ -397,29 +504,56 @@ class PublicAnalysisService:
                 literature=lit,
             )
             if use_llm:
+                _progress(0.88, "模型润色中（通常最耗时，请稍候）…")
                 narrative = enrich_narrative_with_llm(narrative, llm=llm)
             report_payload["public_narrative"] = narrative
-            report_payload["literature"] = lit
+            report_payload["literature"] = {
+                "commonality": lit.get("commonality"),
+                "differences": lit.get("differences"),
+                "innovations": lit.get("innovations"),
+                "relevance_counts": lit.get("relevance_counts"),
+                "row_count": len(lit.get("rows") or []),
+            }
 
+            _progress(0.91, "写出公开叙事…")
             out_dir = self.settings.data_dir / "exports" / "public_reports" / session_id
-            paths = export_report(
-                conn, report_payload, out_dir=out_dir, basename="report"
-            )
+            out_dir.mkdir(parents=True, exist_ok=True)
             public_md = out_dir / "public_narrative.md"
             public_md.write_text(narrative_to_markdown(narrative), encoding="utf-8")
-            paths["public_markdown"] = public_md
-            if lit.get("rows"):
-                csv_path = write_literature_csv(
-                    lit["rows"], out_dir / "literature_breakdown.csv"
-                )
-                paths["literature_csv"] = csv_path
-                narrative["literature_csv"] = str(csv_path)
+            paths: dict[str, Any] = {"public_markdown": public_md}
 
-            # Ephemeral wipe of raw bodies
+            _progress(0.93, "导出报告摘要文件…")
+            # Slim export: avoid dumping full literature rows into giant JSON
+            slim_payload = {
+                k: v for k, v in report_payload.items() if k != "literature"
+            }
+            slim_payload["literature"] = report_payload["literature"]
+            paths.update(
+                export_report(
+                    conn, slim_payload, out_dir=out_dir, basename="report"
+                )
+            )
+            _progress(0.95, "导出样本对照 CSV（表头随画像变化）…")
+            profile = str(narrative.get("analysis_profile") or "mixed")
+            csv_name = (narrative.get("section_labels") or {}).get(
+                "csv_name"
+            ) or "sample_breakdown.csv"
+            csv_path = write_literature_csv(
+                lit.get("rows") or [],
+                out_dir / csv_name,
+                profile=profile,
+            )
+            paths["literature_csv"] = csv_path
+            narrative["literature_csv"] = str(csv_path)
+
+            _progress(0.97, "清除原文（保留结构化结果）…")
             wiped = wipe_raw_document_bodies(conn, doc_ids)
             for p in temp_files:
                 delete_path_quietly(p)
-                delete_path_quietly(p.parent)
+                # Only delete temp dirs we created (insight_*)
+                parent = p.parent
+                if parent.name.startswith("insight_"):
+                    delete_path_quietly(parent)
 
             unique_n = conn.execute(
                 f"""
@@ -429,7 +563,24 @@ class PublicAnalysisService:
                 doc_ids,
             ).fetchone()["c"] if doc_ids else 0
 
+            _progress(0.99, "归档会话…")
             summary = report_payload["public_narrative"].get("one_liner", "")
+            trend_slim = {
+                k: trend.to_dict().get(k)
+                for k in (
+                    "raw_documents",
+                    "unique_documents",
+                    "retention_rate",
+                    "dedup_deletion_rate",
+                    "platform_count",
+                    "domain_count",
+                    "content_kind_counts",
+                    "research_topic_counts",
+                    "relevance_counts",
+                    "behavior_stage_counts",
+                    "price_buckets",
+                )
+            }
             SessionRepository(conn).insert_session(
                 {
                     "session_id": session_id,
@@ -443,10 +594,11 @@ class PublicAnalysisService:
                     "report_run_id": analysis.run_id,
                     "report_summary": summary,
                     "metrics": {
-                        "trend": trend.to_dict(),
-                        "ingest_notes": ingest_notes,
+                        "trend": trend_slim,
+                        "ingest_notes": ingest_notes[:80],
                         "wiped_documents": wiped,
                         "report_path": str(paths.get("markdown")),
+                        "analysis_profile": narrative.get("analysis_profile"),
                     },
                     "llm_mode": llm_mode,
                 }

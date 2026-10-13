@@ -11,7 +11,7 @@ from typing import Any
 
 from insight_engine.config import Settings, get_settings
 from insight_engine.db.repository import DocumentRepository
-from insight_engine.dedup.hasher import content_hash, find_duplicate_id
+from insight_engine.dedup.hasher import DedupScope, content_hash, find_duplicate_id
 from insight_engine.ingest.field_map import build_column_map, row_get
 from insight_engine.ingest.readers import read_csv_rows, read_json_rows, read_txt_as_rows
 from insight_engine.models.documents import (
@@ -63,6 +63,8 @@ class ImportService:
         license_note: str | None = "User-provided research sample",
         save_copy: bool = True,
         field_overrides: dict[str, str] | None = None,
+        dedupe_scope: DedupScope = "global",
+        session_document_ids: list[str] | None = None,
     ) -> ImportBatchResult:
         path = Path(path)
         if not path.exists():
@@ -125,8 +127,10 @@ class ImportService:
                 # Allow title-only failure per row; still require some content field ideally
                 pass
 
+            # Grow session peer list as unique rows land (within-file + cross-file).
+            peer_ids = list(session_document_ids or [])
             for index, row in enumerate(rows, start=1):
-                self._ingest_row(
+                new_id = self._ingest_row(
                     result=result,
                     row=row,
                     row_number=index,
@@ -135,7 +139,13 @@ class ImportService:
                     batch_id=batch_id,
                     stored_path=stored_path,
                     default_content_type=content_type,
+                    dedupe_scope=dedupe_scope,
+                    peer_document_ids=peer_ids,
                 )
+                if new_id and session_document_ids is not None:
+                    session_document_ids.append(new_id)
+                if new_id:
+                    peer_ids.append(new_id)
 
             if result.errors and result.row_count_imported == 0:
                 result.status = "failed"
@@ -170,16 +180,21 @@ class ImportService:
         if content_type == "txt":
             return read_txt_as_rows(path)
         if content_type == "pdf":
+            from insight_engine.product.doc_genre import (
+                classify_document_genre,
+                genre_to_content_type,
+            )
             from insight_engine.product.pdf_extract import extract_pdf_text
 
             text = extract_pdf_text(path)
+            genre = classify_document_genre(text, title=path.stem)
             return (
                 ["title", "content", "content_type"],
                 [
                     {
                         "title": path.stem,
                         "content": text,
-                        "content_type": "literature_pdf",
+                        "content_type": genre_to_content_type(genre),
                     }
                 ],
             )
@@ -196,7 +211,9 @@ class ImportService:
         batch_id: str,
         stored_path: str,
         default_content_type: str,
-    ) -> None:
+        dedupe_scope: DedupScope = "global",
+        peer_document_ids: list[str] | None = None,
+    ) -> str | None:
         raw_content = row_get(row, column_map, "content")
         title = row_get(row, column_map, "title")
         if raw_content is None or str(raw_content).strip() == "":
@@ -215,7 +232,7 @@ class ImportService:
                 )
                 result.errors.append(err)
                 self.repo.insert_error(err)
-                return
+                return None
 
         published_raw = row_get(row, column_map, "published_at")
         published_at, date_err = parse_datetime_to_iso(
@@ -251,11 +268,17 @@ class ImportService:
             lowercase=self.settings.dedup_lowercase,
             collapse_whitespace=self.settings.dedup_collapse_whitespace,
         )
-        duplicate_of = find_duplicate_id(self.conn, hash_value)
+        duplicate_of = find_duplicate_id(
+            self.conn,
+            hash_value,
+            scope=dedupe_scope,
+            peer_document_ids=peer_document_ids,
+        )
         is_duplicate = duplicate_of is not None
+        document_id = str(uuid.uuid4())
 
         doc = DocumentCreate(
-            document_id=str(uuid.uuid4()),
+            document_id=document_id,
             source_id=source.source_id,
             batch_id=batch_id,
             source_type=source.source_type,
@@ -275,6 +298,7 @@ class ImportService:
                 "import_row_number": row_number,
                 "stored_path": stored_path,
                 "column_map": column_map,
+                "dedupe_scope": dedupe_scope,
             },
             is_duplicate=is_duplicate,
             duplicate_of=duplicate_of,
@@ -283,3 +307,5 @@ class ImportService:
         result.row_count_imported += 1
         if is_duplicate:
             result.row_count_dupes += 1
+            return None  # do not grow session peer set with duplicates
+        return document_id

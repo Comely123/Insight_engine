@@ -1,0 +1,100 @@
+# Batch C — research relevance (4 tiers) + innovation (3 steps).
+prompt_version: relevance-innovation-v1
+
+# Step 0 / Dimension: how related is this record to the research question?
+# Prefer pending_review over forced direct/edge when ambiguous.
+relevance:
+  direct_topics: [living_blessing, memorial, pet_funeral, religious_ritual]
+  edge_topics: [souvenir]
+  unrelated_topics: [unrelated]
+  # Strong anchors for pet-blessing / memorial service research
+  strong_anchors: [祈福, 毛发祈福, 宠物祈福, 离世纪念, 宠物殡葬, 毛发手绳, 平安结, 养宠]
+  weak_anchors: [宠物, 毛孩, 手绳, 纪念品, 毛发, 猫咪, 狗狗, pet, dog, cat]
+  # If text is very short, do not force unrelated/direct
+  min_chars_for_unrelated: 80
+
+innovation:
+  # Step 2 cues — necessary but NOT sufficient
+  cue_keywords:
+    - 创新
+    - 首次
+    - 提出
+    - 新颖
+    - 突破
+    - 新方法
+    - 新框架
+    - 新模式
+    - 服务设计
+    - novel
+    - propose
+    - proposed
+    - first
+    - breakthrough
+    - innovative
+  # Step 3 — evidence that the cue is about a concrete contribution
+  substance_keywords:
+    - 方法
+    - 框架
+    - 模型
+    - 算法
+    - 实验
+    - 问卷
+    - 访谈
+    - 流程
+    - 服务
+    - 模式
+    - 设计
+    - 指标
+    - 验证
+    - 试点
+    - method
+    - framework
+    - model
+    - experiment
+    - survey
+    - design
+    - service
+    - protocol
+  # Window around cue for evidence excerpt
+  context_chars: 80
+  min_substance_excerpt_chars: 12
+  require_distinct_excerpts: true
+
+# Noise terms excluded from theme co-occurrence (not from source metadata fields)
+noise_terms:
+  - authors
+  - year
+  - nbsp
+  - china
+  - press
+  - com
+  - research
+  - article
+  - abstract
+  - keywords
+  - doi
+  - http
+  - https
+  - www
+  - html
+  - pdf
+  - vol
+  - pp
+  - et
+  - al
+  - journal
+  - university
+  - between
+  - system
+  - world
+  - study
+  - using
+  - based
+  - data
+  - model
+  - results
+  - conclusion
+  - introduction
+  - 联合早报
+  - 参考文献
+  - 作者简介

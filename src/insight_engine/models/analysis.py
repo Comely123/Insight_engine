@@ -49,12 +49,16 @@ class EvidenceRef(BaseModel):
 
 class ExtractedClaim(BaseModel):
     claim_type: Literal[
-        "topic",
-        "intent",
+        "topic",  # legacy alias; prefer research_topic
+        "intent",  # legacy commerce intent
         "price",
         "stance",
         "behavior_stage",
-        "demand_subtype",
+        "demand_subtype",  # legacy; mapped from research_topic when applicable
+        "content_kind",
+        "research_topic",
+        "relevance",
+        "innovation",
         "custom",
     ]
     claim_value: str

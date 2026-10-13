@@ -50,7 +50,16 @@ def test_literature_common_diff_innov(tmp_settings) -> None:
     assert len(lit["rows"]) == 2
     assert lit["commonality"]
     assert lit["differences"]
-    assert any("创新" in x or "首次" in x for x in lit["innovations"])
-    csv_text = literature_rows_to_csv(lit["rows"])
-    assert "title" in csv_text
+    assert lit["relevance_counts"]
+    row_a = next(r for r in lit["rows"] if r["document_id"] == "d1")
+    assert row_a["relevance_tier"] in {"direct", "edge"}
+    assert row_a["innovation_hints"]
+    assert row_a["innovation_evidence"]
+    assert any("创新" in x or "首次" in x or "提出" in x for x in lit["innovations"])
+    csv_text = literature_rows_to_csv(lit["rows"], profile="literature")
+    assert "标题" in csv_text
+    assert "创新点" in csv_text
     assert "paper-A" in csv_text
+    # Deep fields present on rows
+    assert "future_directions" in row_a
+    assert "year" in row_a

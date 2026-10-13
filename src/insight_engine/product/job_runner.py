@@ -98,7 +98,7 @@ def _execute_job(job_id: str) -> None:
     if job is None:
         return
 
-    store.update(job_id, status="running", message="正在采集与分析…")
+    store.update(job_id, status="running", message="正在采集与分析…", progress=0.05)
     params = job["params"]
     work = job_workdir(settings, job_id)
     upload_dir = work / "uploads"
@@ -109,6 +109,9 @@ def _execute_job(job_id: str) -> None:
     llm_key = None
     if use_llm:
         llm_key = SecretsStore(settings).get_secret(f"llm.api_key.{provider}")
+
+    def _on_progress(pct: float, msg: str) -> None:
+        store.update(job_id, status="running", message=msg, progress=pct)
 
     try:
         result = PublicAnalysisService(settings).run(
@@ -122,6 +125,7 @@ def _execute_job(job_id: str) -> None:
             llm_base_url=params.get("llm_base_url"),
             llm_model=params.get("llm_model"),
             use_llm=use_llm,
+            on_progress=_on_progress,
         )
         status = result.get("status") or "succeeded"
         if status == "empty":

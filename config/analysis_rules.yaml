@@ -1,9 +1,11 @@
-# Generic rule keywords for Phase 2. Domain terms live here, not in engine code.
-prompt_version: rules-v1
+# Legacy rules (intent/stance/price). Research topics live in taxonomy_v2.yaml (Batch B).
+prompt_version: rules-v1+taxonomy-v2
 
+# Deprecated for research conclusions — kept only for older tooling.
+# Use config/taxonomy_v2.yaml research_topics instead.
 topics:
   memorial_craft:
-    label: 纪念/祈福手工
+    label: "[deprecated] 纪念/祈福手工"
     keywords: [祈福, 编织, 手绳, 平安结, 毛发, 纪念品, 编织物]
   pricing:
     label: 价格讨论
@@ -49,11 +51,11 @@ stance:
     keywords: [推荐, 好评, 值得, 有仪式感, 不错, 喜欢]
 
 price:
-  # Captures amounts like 128元, ¥99, 80-150, 80 到 150
+  # Confirmed buckets require 元 or ¥/￥. Ranges must include 元 (no optional 元).
   patterns:
     - '(?P<amount>\d+(?:\.\d+)?)\s*元'
     - '[¥￥]\s*(?P<amount>\d+(?:\.\d+)?)'
-    - '(?P<low>\d+(?:\.\d+)?)\s*[-~到至]\s*(?P<high>\d+(?:\.\d+)?)\s*元?'
+    - '(?P<low>\d+(?:\.\d+)?)\s*[-~到至]\s*(?P<high>\d+(?:\.\d+)?)\s*元'
 
 trends:
   min_unique_docs: 5

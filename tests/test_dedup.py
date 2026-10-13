@@ -37,3 +37,52 @@ def test_exact_duplicate_marked(db_conn, tmp_settings, tmp_path):
     assert by_title["B"]["is_duplicate"] == 1
     assert by_title["B"]["duplicate_of"] == by_title["A"]["document_id"]
     assert find_duplicate_id(db_conn, by_title["A"]["content_hash"]) == by_title["A"]["document_id"]
+
+
+def test_session_scope_allows_reupload_against_prior_global(db_conn, tmp_settings, tmp_path):
+    """Re-uploading the same literature must not zero-out a new public analysis batch."""
+    import json
+
+    body = "文献正文用于会话级去重测试 " * 20
+    service = ImportService(db_conn, tmp_settings)
+
+    def write_doc(name: str, title: str) -> Path:
+        path = tmp_path / name
+        path.write_text(
+            json.dumps({"documents": [{"title": title, "content": body}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return path
+
+    r1 = service.import_file(
+        write_doc("first.json", "Paper"),
+        permission_status=PermissionStatus.USER_OWNED,
+        save_copy=False,
+        dedupe_scope="global",
+    )
+    assert r1.row_count_imported == 1
+    assert r1.row_count_dupes == 0
+
+    peers: list[str] = []
+    r2 = service.import_file(
+        write_doc("second.json", "Paper again"),
+        permission_status=PermissionStatus.USER_OWNED,
+        save_copy=False,
+        dedupe_scope="session",
+        session_document_ids=peers,
+    )
+    assert r2.row_count_imported == 1
+    assert r2.row_count_dupes == 0
+    assert len(peers) == 1
+
+    # Same content again inside the same session → soft-dup
+    r3 = service.import_file(
+        write_doc("third.json", "Paper copy"),
+        permission_status=PermissionStatus.USER_OWNED,
+        save_copy=False,
+        dedupe_scope="session",
+        session_document_ids=peers,
+    )
+    assert r3.row_count_imported == 1
+    assert r3.row_count_dupes == 1
+    assert len(peers) == 1

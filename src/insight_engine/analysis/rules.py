@@ -104,35 +104,11 @@ def _classify_stance(text: str, rules: dict[str, Any]) -> tuple[StancePolarity, 
     return StancePolarity.NEUTRAL, None
 
 
-def _extract_prices(text: str, rules: dict[str, Any]) -> list[tuple[float, EvidenceRef]]:
+def _extract_prices(text: str, rules: dict[str, Any], *, source_id: str = ""):
+    from insight_engine.analysis.price_extract import extract_structured_prices
+
     patterns = (rules.get("price") or {}).get("patterns") or []
-    found: list[tuple[float, EvidenceRef]] = []
-    seen: set[float] = set()
-    for pattern in patterns:
-        try:
-            regex = re.compile(pattern)
-        except re.error:
-            continue
-        for match in regex.finditer(text):
-            amounts: list[float] = []
-            if match.groupdict().get("amount"):
-                amounts.append(float(match.group("amount")))
-            if match.groupdict().get("low") and match.groupdict().get("high"):
-                amounts.extend([float(match.group("low")), float(match.group("high"))])
-            start, end = match.span()
-            excerpt = text[max(0, start - 20) : min(len(text), end + 20)].strip()
-            ev = EvidenceRef(
-                document_id="",
-                excerpt=excerpt or match.group(0),
-                char_start=start,
-                char_end=end,
-            )
-            for amount in amounts:
-                if amount in seen:
-                    continue
-                seen.add(amount)
-                found.append((amount, ev))
-    return found
+    return extract_structured_prices(text, source_id=source_id, patterns=patterns)
 
 
 def analyze_document_rules(
@@ -141,28 +117,87 @@ def analyze_document_rules(
     title: str | None,
     content: str | None,
     rules_path: str | None = None,
+    content_type: str | None = None,
+    research_keywords: list[str] | None = None,
+    research_brief: str | None = None,
 ) -> DocumentAnalysisResult:
+    from insight_engine.analysis.innovation import build_innovation_claim
+    from insight_engine.analysis.relevance import build_relevance_claim
+    from insight_engine.analysis.taxonomy import build_taxonomy_claims, load_taxonomy
+
     rules = load_rules(rules_path)
+    tax = load_taxonomy()
     text = " ".join(x for x in [title or "", content or ""] if x).strip()
     if not text:
         return DocumentAnalysisResult(
             document_id=document_id,
-            topic="other",
+            topic="unknown",
             intent=IntentLabel.UNKNOWN,
             stance=StancePolarity.UNKNOWN,
             analyzer="rules",
-            prompt_version=str(rules.get("prompt_version", "rules-v1")),
+            prompt_version=str(tax.get("prompt_version", "taxonomy-v2")),
             confidence=0.0,
             unknowns=["empty document content"],
         )
 
-    topic_id, topic_label, topic_ev = _classify_topic(text, rules)
+    # Batch B primary dimensions (independent)
+    tax_claims, tax_meta = build_taxonomy_claims(
+        document_id=document_id,
+        title=title,
+        content=content,
+        ingest_content_type=content_type,
+    )
+    research_topic = str(tax_meta.get("research_topic") or "unknown")
+    content_kind = str(tax_meta.get("content_kind") or "unknown")
+    behavior_stage = str(tax_meta.get("behavior_stage") or "unknown")
+
+    topic_labels = {
+        str(t.get("id")): str(t.get("label") or t.get("id"))
+        for t in (tax.get("research_topics") or [])
+        if isinstance(t, dict)
+    }
+    topic_label = topic_labels.get(research_topic, research_topic)
+
+    # Legacy intent kept for compatibility — not used as research_topic.
     intent, intent_ev = _classify_intent(text, rules)
     stance, stance_ev = _classify_stance(text, rules)
-    price_hits = _extract_prices(text, rules)
+    price_hits = _extract_prices(text, rules, source_id=document_id)
 
-    claims: list[ExtractedClaim] = []
-    facts: list[str] = []
+    claims: list[ExtractedClaim] = list(tax_claims)
+    facts: list[str] = [
+        f"content_kind={content_kind}",
+        f"research_topic={research_topic}",
+        f"behavior_stage={behavior_stage}",
+    ]
+    for n in tax_meta.get("notes") or []:
+        facts.append(f"taxonomy_note={n}")
+    for c in tax_meta.get("conflicts") or []:
+        facts.append(f"taxonomy_conflict={c}")
+
+    # Batch C: relevance (4 tiers) then gated innovation (cue + substance)
+    rel_claim, rel_tier, rel_reason = build_relevance_claim(
+        document_id=document_id,
+        title=title,
+        content=content,
+        research_topic=research_topic,
+        research_keywords=research_keywords,
+        research_brief=research_brief,
+    )
+    claims.append(rel_claim)
+    facts.append(f"relevance={rel_tier}")
+    facts.append(f"relevance_reason={rel_reason}")
+
+    innov_claim, innov_reason = build_innovation_claim(
+        document_id=document_id,
+        title=title,
+        content=content,
+        relevance_tier=rel_tier,
+    )
+    if innov_claim is not None:
+        claims.append(innov_claim)
+        facts.append(f"innovation={innov_claim.claim_value}")
+    else:
+        facts.append(f"innovation_skip={innov_reason}")
 
     def bind(ev: EvidenceRef | None, fallback: str) -> EvidenceRef:
         if ev is None:
@@ -176,16 +211,32 @@ def analyze_document_rules(
             segment_id=ev.segment_id,
         )
 
+    # Legacy topic claim mirrors research_topic (not old memorial_craft bag)
     claims.append(
         ExtractedClaim(
             claim_type="topic",
-            claim_value=topic_id,
-            confidence=0.7 if topic_id != "other" else 0.3,
-            is_inference=topic_id == "other",
-            evidence=[bind(topic_ev, topic_id)],
+            claim_value=research_topic,
+            confidence=0.7 if research_topic not in {"unknown", "unrelated"} else 0.3,
+            is_inference=research_topic == "unknown",
+            evidence=[bind(None, research_topic)],
         )
     )
-    facts.append(f"topic={topic_id}")
+
+    # demand_subtype: only when topic is one of the two demand-like research topics
+    if research_topic in {"memorial", "living_blessing"}:
+        demand_val = research_topic
+    else:
+        demand_val = "unknown"
+    claims.append(
+        ExtractedClaim(
+            claim_type="demand_subtype",
+            claim_value=demand_val,
+            confidence=0.65 if demand_val != "unknown" else 0.2,
+            is_inference=demand_val == "unknown",
+            evidence=[bind(None, demand_val)],
+        )
+    )
+    facts.append(f"demand_subtype={demand_val}")
 
     claims.append(
         ExtractedClaim(
@@ -210,39 +261,62 @@ def analyze_document_rules(
     )
 
     prices: list[float] = []
-    for amount, ev in price_hits:
-        prices.append(amount)
+    for hit in price_hits:
+        ev = EvidenceRef(
+            document_id="",
+            excerpt=hit.context or hit.raw_expression,
+            char_start=hit.char_start,
+            char_end=hit.char_end,
+        )
         claims.append(
             ExtractedClaim(
                 claim_type="price",
-                claim_value=str(amount),
-                confidence=0.8,
-                is_inference=False,
-                evidence=[bind(ev, str(amount))],
+                claim_value=hit.to_claim_value(),
+                confidence=0.85 if hit.is_confirmed_price else 0.35,
+                is_inference=not hit.is_confirmed_price,
+                evidence=[bind(ev, hit.raw_expression)],
             )
         )
-        facts.append(f"price={amount}")
-
-    # Phase 4: behavior_stage + demand_subtype (in addition to intent)
-    from insight_engine.research.behavior import classify_behavior_and_subtype
-
-    behavior_claims = classify_behavior_and_subtype(
-        document_id=document_id, title=title, content=content
-    )
-    claims.extend(behavior_claims)
-    for bc in behavior_claims:
-        facts.append(f"{bc.claim_type}={bc.claim_value}")
+        if hit.is_confirmed_price:
+            prices.append(hit.amount)
+            facts.append(f"price_confirmed={hit.amount}")
+        else:
+            facts.append(f"price_pending={hit.amount}:{hit.price_type}")
 
     event_title = (title or text[:40]).strip()
-    summary_parts = [f"主题:{topic_label}", f"意向:{intent.value}", f"立场:{stance.value}"]
+    summary_parts = [
+        f"文体:{content_kind}",
+        f"主题:{topic_label}",
+        f"相关:{rel_tier}",
+        f"行为:{behavior_stage}",
+        f"立场:{stance.value}",
+    ]
+    if innov_claim is not None:
+        summary_parts.append(f"创新:{innov_claim.claim_value}")
     if prices:
         summary_parts.append(f"价格:{','.join(str(p) for p in prices)}")
-    for bc in behavior_claims:
-        summary_parts.append(f"{bc.claim_type}:{bc.claim_value}")
+
+    unknowns: list[str] = []
+    if content_kind == "unknown":
+        unknowns.append("content_kind unknown")
+    if research_topic == "unknown":
+        unknowns.append("research_topic unknown")
+    if behavior_stage == "unknown":
+        unknowns.append("behavior_stage unknown")
+    if rel_tier == "pending_review":
+        unknowns.append("relevance pending_review")
+
+    inferences = list(tax_meta.get("conflicts") or [])
+    if research_topic == "unrelated":
+        inferences.append("research_topic=unrelated（与研究域锚点无关，非强制需求标签）")
+    if rel_tier == "unrelated":
+        inferences.append("relevance=unrelated（创新主张已门控，不计入创新）")
+    elif innov_claim is None and innov_reason.startswith("gated_by_relevance"):
+        inferences.append(f"innovation_gated:{innov_reason}")
 
     return DocumentAnalysisResult(
         document_id=document_id,
-        topic=topic_id,
+        topic=research_topic,
         topic_label=topic_label,
         intent=intent,
         stance=stance,
@@ -251,9 +325,9 @@ def analyze_document_rules(
         event_summary="; ".join(summary_parts),
         claims=claims,
         facts=facts,
-        inferences=["topic=other 为兜底分类"] if topic_id == "other" else [],
-        unknowns=["intent unknown"] if intent == IntentLabel.UNKNOWN else [],
+        inferences=inferences,
+        unknowns=unknowns,
         analyzer="rules",
-        prompt_version=str(rules.get("prompt_version", "rules-v1")),
-        confidence=0.65 if topic_id != "other" else 0.35,
+        prompt_version=str(tax.get("prompt_version", "taxonomy-v2")),
+        confidence=0.65 if research_topic not in {"unknown", "unrelated"} and rel_tier in {"direct", "edge"} else 0.35,
     )

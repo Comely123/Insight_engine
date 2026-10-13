@@ -1,5 +1,5 @@
-# Phase 4 research rules — domain terms stay in config, not engine core.
-prompt_version: research-rules-v1
+# Legacy research rules. Batch B primary taxonomy: config/taxonomy_v2.yaml
+prompt_version: research-rules-v1+taxonomy-v2
 
 # Most specific behavior stage wins (checked in order).
 behavior_stages:

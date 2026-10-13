@@ -76,7 +76,7 @@ INSIGHT_ASR_MODEL=tiny
 
 | 项 | 说明 |
 |---|---|
-| 数据来源 | 用户上传（含 PDF 文献）+ 已开放公开资讯；未授权平台不展示 |
+| 数据来源 | 用户上传 + 公开资讯 RSS + 免费学术 API（OpenAlex / Semantic Scholar / Crossref / arXiv / Europe PMC / PubMed / OpenAIRE）；CORE、YouTube 可自填 API Key；未授权社交平台不展示 |
 | 原文策略 | 分析完成后**立即清除**正文；保留结构化结果与短摘录 |
 | 报告 | 文字发现/建议/文献共性 + 多种图表；可导出 MD/PDF |
 | 模型 | 规则 / OpenAI / DeepSeek / 通义 / 智谱 / Kimi / 豆包 / 混元 / 百川 / Yi / 硅基流动 / 自部署 |

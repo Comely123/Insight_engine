@@ -45,7 +45,7 @@ class AnalysisService:
     def list_analyzable_documents(self, *, include_duplicates: bool = False) -> list[dict[str, Any]]:
         sql = """
             SELECT document_id, title, normalized_content, raw_content, published_at,
-                   collected_at, source_name, permission_status
+                   collected_at, source_name, permission_status, content_type
             FROM documents
         """
         if not include_duplicates:
@@ -59,6 +59,8 @@ class AnalysisService:
         document_ids: list[str] | None = None,
         use_llm: bool = False,
         include_duplicates: bool = False,
+        research_keywords: list[str] | None = None,
+        research_brief: str | None = None,
     ) -> AnalysisRunSummary:
         rules = load_rules(self.rules_path)
         prompt_version = str(rules.get("prompt_version", "rules-v1"))
@@ -84,7 +86,12 @@ class AnalysisService:
             analyzer_type=analyzer_type,
             model_name=model_name,
             prompt_version=prompt_version,
-            config={"use_llm": use_llm, "include_duplicates": include_duplicates},
+            config={
+                "use_llm": use_llm,
+                "include_duplicates": include_duplicates,
+                "research_keywords": list(research_keywords or [])[:40],
+                "research_brief": (research_brief or "")[:500],
+            },
         )
         self.conn.commit()
 
@@ -103,6 +110,9 @@ class AnalysisService:
                     title=doc.get("title"),
                     content=content,
                     rules_path=self.rules_path,
+                    content_type=doc.get("content_type"),
+                    research_keywords=research_keywords,
+                    research_brief=research_brief,
                 )
                 if use_llm and self.llm.available():
                     result = self._maybe_enrich_with_llm(run_id, doc, result)
