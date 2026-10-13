@@ -1,5 +1,5 @@
 # Phase 3 media processing defaults (non-secret)
-allowed_extensions: [".mp4", ".mov", ".mkv", ".webm", ".mp3", ".wav", ".m4a", ".aac"]
+allowed_extensions: [".mp4", ".mov", ".mkv", ".webm", ".avi", ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"]
 subtitle_extensions: [".srt", ".vtt"]
 
 max_duration_seconds: 1800
