@@ -15,9 +15,14 @@ from insight_engine.db.connection import get_connection
 from insight_engine.db.session_repository import SessionRepository
 from insight_engine.ingest.service import ImportService
 from insight_engine.llm.factory import get_llm_provider
+from insight_engine.media.asr.factory import get_asr_provider
+from insight_engine.media.ingest import MediaIngestService
+from insight_engine.media.pipeline import MediaPipeline
+from insight_engine.media.subtitles import load_subtitle_file
 from insight_engine.models.documents import PermissionStatus
 from insight_engine.ops.ephemeral import delete_path_quietly, wipe_raw_document_bodies
 from insight_engine.ops.logging_util import get_logger
+from insight_engine.product.uploads import pair_captions
 from insight_engine.reports.builder import build_research_report, export_report
 from insight_engine.research.service import ResearchWorkbenchService
 from insight_engine.trends.alerts import generate_alerts
@@ -80,9 +85,46 @@ class PublicAnalysisService:
             if mode == "upload":
                 if not upload_paths:
                     raise ValueError("请上传至少一个文件")
-                for path in upload_paths:
+                text_paths, media_paths, media_caption_map, unsupported = pair_captions(
+                    [Path(p) for p in upload_paths]
+                )
+                for path in unsupported:
+                    ingest_notes.append(f"{path.name}: 不支持的文件类型，已跳过")
+
+                for path in text_paths:
+                    if path.suffix.lower() in {".srt", ".vtt"}:
+                        try:
+                            cues = load_subtitle_file(path)
+                            body = "\n".join(c.text for c in cues if c.text)
+                            if not body.strip():
+                                ingest_notes.append(f"{path.name}: 字幕为空")
+                                continue
+                            tmp = Path(tempfile.mkdtemp(prefix="insight_cap_")) / f"{path.stem}.json"
+                            tmp.write_text(
+                                json.dumps(
+                                    {
+                                        "documents": [
+                                            {
+                                                "title": path.name,
+                                                "content": body,
+                                                "source_name": f"upload:{path.name}",
+                                                "content_type": "subtitle",
+                                            }
+                                        ]
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                encoding="utf-8",
+                            )
+                            temp_files.append(tmp)
+                            import_path = tmp
+                        except Exception as exc:  # noqa: BLE001
+                            ingest_notes.append(f"{path.name}: 字幕解析失败 {exc}")
+                            continue
+                    else:
+                        import_path = path
                     result = importer.import_file(
-                        path,
+                        import_path,
                         source_name=f"upload:{path.name}",
                         permission_status=PermissionStatus.USER_OWNED,
                         license_note="User upload via public product",
@@ -96,6 +138,83 @@ class PublicAnalysisService:
                         (result.batch_id,),
                     ).fetchall()
                     doc_ids.extend(r["document_id"] for r in rows)
+
+                media_svc = MediaIngestService(conn, self.settings)
+                media_pipe = MediaPipeline(conn, self.settings)
+                asr_ok = get_asr_provider().available()
+                for path in media_paths:
+                    try:
+                        asset = media_svc.import_media(
+                            path,
+                            permission_status=PermissionStatus.USER_OWNED,
+                            source_name=f"upload:{path.name}",
+                            license_note="User media upload via public product",
+                            copy_into_media_dir=True,
+                            subtitle_path=media_caption_map.get(path),
+                        )
+                        proc = media_pipe.process_media(
+                            asset["media_id"],
+                            run_asr=asr_ok,
+                            run_ocr=False,
+                            run_keyframes=False,
+                            subtitle_path=media_caption_map.get(path),
+                            force=True,
+                        )
+                        refreshed = media_svc.repo.get_asset(asset["media_id"]) or {}
+                        mid_doc = refreshed.get("document_id")
+                        if mid_doc:
+                            doc_ids.append(mid_doc)
+                            ingest_notes.append(
+                                f"{path.name}: media={proc.get('status')} doc=ok asr={'on' if asr_ok else 'off'}"
+                            )
+                        else:
+                            # Fallback stub so analysis can still see the file existed
+                            stub = Path(tempfile.mkdtemp(prefix="insight_media_")) / f"{path.stem}.json"
+                            dur = refreshed.get("duration_seconds")
+                            stub.write_text(
+                                json.dumps(
+                                    {
+                                        "documents": [
+                                            {
+                                                "title": path.name,
+                                                "content": (
+                                                    f"用户上传媒体文件：{path.name}。"
+                                                    f"时长约 {dur or '未知'} 秒。"
+                                                    "未能提取字幕/转写文本"
+                                                    + ("（未安装 ASR）" if not asr_ok else "")
+                                                    + "。可同时上传同名 .srt 字幕以便分析。"
+                                                ),
+                                                "source_name": f"upload:{path.name}",
+                                                "content_type": "media_stub",
+                                            }
+                                        ]
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                encoding="utf-8",
+                            )
+                            temp_files.append(stub)
+                            result = importer.import_file(
+                                stub,
+                                source_name=f"upload:{path.name}",
+                                permission_status=PermissionStatus.USER_OWNED,
+                                license_note="Media stub without transcript",
+                                save_copy=False,
+                            )
+                            rows = conn.execute(
+                                "SELECT document_id FROM documents WHERE batch_id = ?",
+                                (result.batch_id,),
+                            ).fetchall()
+                            doc_ids.extend(r["document_id"] for r in rows)
+                            ingest_notes.append(
+                                f"{path.name}: media={proc.get('status')} 无转写，已记入占位说明"
+                            )
+                        # Ephemeral: drop copied media file after extract
+                        local = refreshed.get("local_path")
+                        if local:
+                            delete_path_quietly(local)
+                    except Exception as exc:  # noqa: BLE001
+                        ingest_notes.append(f"{path.name}: 媒体处理失败 {exc}")
 
             elif mode == "collect":
                 # Write collected items to a temp JSON then import

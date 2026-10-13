@@ -85,8 +85,26 @@ def page_collect() -> None:
     collector_ids: list[str] = []
     if mode == "upload":
         uploaded = st.file_uploader(
-            "上传 CSV / JSON / TXT（可多选）",
-            type=["csv", "json", "txt", "md"],
+            "上传文件（可多选：文字 / 音频 / 视频）",
+            type=[
+                "csv",
+                "json",
+                "txt",
+                "md",
+                "log",
+                "srt",
+                "vtt",
+                "mp4",
+                "mov",
+                "mkv",
+                "webm",
+                "mp3",
+                "wav",
+                "m4a",
+                "aac",
+                "flac",
+                "ogg",
+            ],
             accept_multiple_files=True,
         )
     else:

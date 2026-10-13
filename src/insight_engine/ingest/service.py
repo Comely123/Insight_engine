@@ -34,9 +34,12 @@ def detect_format(path: Path) -> str:
         return "csv"
     if suffix == ".json":
         return "json"
-    if suffix in {".txt", ".md", ".markdown"}:
+    if suffix in {".txt", ".md", ".markdown", ".log", ".text"}:
         return "txt"
-    raise ValueError(f"Unsupported file type: {suffix or '(none)'}. Use .csv, .json, .txt, or .md")
+    raise ValueError(
+        f"Unsupported file type: {suffix or '(none)'}. "
+        "Use .csv, .json, .txt, .md, or audiovisual formats via the public upload pipeline."
+    )
 
 
 class ImportService:
