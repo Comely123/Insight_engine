@@ -1,4 +1,9 @@
-# Quick setup for optional media stack:
+# Quick setup for media stack (ASR / FFmpeg / Whisper).
+# Prefer the all-in-one local deploy (install + launch):
+#   .\一键安装启动.ps1
+#   .\scripts\install_and_run.ps1
+#
+# This script only prepares media deps:
 #   - Python deps: faster-whisper / pytesseract / Pillow (+ base requirements)
 #   - System: FFmpeg (required for video/audio probe & extract)
 #   - System: Tesseract (optional OCR)

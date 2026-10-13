@@ -6,6 +6,19 @@
 
 ## 产品入口（推荐）
 
+**一键安装并启动**（含音视频 ASR / FFmpeg / Whisper；建议管理员 PowerShell）：
+
+```powershell
+git clone https://github.com/Comely123/Insight_engine.git
+cd Insight_engine
+powershell -ExecutionPolicy Bypass -File .\一键安装启动.ps1
+```
+
+脚本会：建虚拟环境 → 装依赖 → 装 FFmpeg（及 OCR）→ 下载 Whisper 模型 → 初始化数据库 → 打开公开站（`http://localhost:8501`）。  
+只要安装不启动：`.\一键安装启动.ps1 -NoLaunch`
+
+分步手动安装（同上效果）：
+
 ```powershell
 git clone https://github.com/Comely123/Insight_engine.git
 cd Insight_engine
@@ -18,8 +31,7 @@ streamlit run src\insight_engine\ui\public_app.py
 # 或: .\scripts\run_public.ps1
 ```
 
-> **说明**：上面这一步只装「基础能力」（上传文本/JSON/CSV、公开资讯采集、规则报告、PDF 文献文字提取、OpenAI/DeepSeek 会话 Key）。  
-> **音视频无字幕时的 ASR 转写、FFmpeg、OCR 不在基础安装里**，见下一节。
+> **说明**：一键脚本已包含音视频转写栈。若只用手动步骤，基础 `pip install` **不含** ASR/FFmpeg，见下一节。
 
 管理端（检索归档导出，不对公众开放）：
 
