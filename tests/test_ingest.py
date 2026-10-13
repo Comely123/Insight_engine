@@ -9,7 +9,7 @@ from insight_engine.models.documents import PermissionStatus
 from insight_engine.search.fts import SearchFilters, search_documents
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLES = ROOT / "data" / "samples"
+SAMPLES = ROOT / "tests" / "fixtures"
 
 
 def test_detect_format():

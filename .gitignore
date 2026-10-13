@@ -7,7 +7,7 @@ env/
 .env
 .env.local
 
-# Local data (keep samples tracked)
+# Local data
 data/insight.db
 data/insight.db-*
 data/imports/
@@ -18,7 +18,10 @@ data/backups/
 data/benchmarks/
 data/logs/
 data/*.db
+# samples dir kept empty (.gitkeep); no bundled demo corpora
 !data/samples/
+!data/samples/.gitkeep
+
 
 # Python
 __pycache__/

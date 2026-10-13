@@ -45,15 +45,6 @@ license_note = st.text_input("许可说明（可选）", value="User-provided re
 
 uploaded = st.file_uploader("选择文件", type=["csv", "json", "txt", "md", "markdown"])
 
-sample_files = sorted(settings.samples_dir.glob("*")) if settings.samples_dir.exists() else []
-sample_choice = None
-if sample_files:
-    st.markdown("或选择仓库示例数据：")
-    labels = ["（不使用示例）"] + [p.name for p in sample_files]
-    pick = st.selectbox("示例文件", labels)
-    if pick != "（不使用示例）":
-        sample_choice = settings.samples_dir / pick
-
 if st.button("开始导入", type="primary"):
     target_path: Path | None = None
     tmp_path: Path | None = None
@@ -65,11 +56,8 @@ if st.button("开始导入", type="primary"):
                 tmp_path = Path(tmp.name)
             target_path = tmp_path
             display_name = uploaded.name
-        elif sample_choice is not None:
-            target_path = sample_choice
-            display_name = sample_choice.name
         else:
-            st.error("请上传文件或选择示例数据。")
+            st.error("请上传文件。")
             st.stop()
 
         # Preserve original filename for batch metadata via copy name trick:

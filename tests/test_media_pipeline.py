@@ -14,7 +14,7 @@ from insight_engine.media.dedup_link import text_similarity
 from insight_engine.models.documents import PermissionStatus
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLE_DIR = ROOT / "data" / "samples" / "media"
+SAMPLE_DIR = ROOT / "tests" / "fixtures" / "media"
 
 
 def _ensure_samples() -> None:

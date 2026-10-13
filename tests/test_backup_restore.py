@@ -7,7 +7,7 @@ from insight_engine.ingest.service import ImportService
 from insight_engine.ops.backup import backup_database, integrity_check, restore_database
 from insight_engine.ops.logging_util import redact_secrets
 
-SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
+SAMPLES = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 
 
 def test_backup_restore_roundtrip(tmp_settings):

@@ -335,3 +335,24 @@ CREATE TABLE IF NOT EXISTS report_exports (
   citation_errors_json TEXT,
   created_at           TEXT NOT NULL
 );
+
+-- Public product: anonymous search / report archive (no login required)
+CREATE TABLE IF NOT EXISTS search_sessions (
+  session_id           TEXT PRIMARY KEY,
+  anonymous_id         TEXT,
+  mode                 TEXT NOT NULL,
+  keywords_json        TEXT NOT NULL,
+  research_brief       TEXT,
+  collector_ids_json   TEXT,
+  document_count       INTEGER,
+  unique_document_count INTEGER,
+  report_run_id        TEXT,
+  report_summary       TEXT,
+  metrics_json         TEXT,
+  llm_mode             TEXT,
+  created_at           TEXT NOT NULL,
+  client_meta_json     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_search_sessions_created ON search_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_search_sessions_anon ON search_sessions(anonymous_id);

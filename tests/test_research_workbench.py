@@ -11,7 +11,7 @@ from insight_engine.research.behavior import classify_behavior_and_subtype
 from insight_engine.research.keywords import document_matches_keywords
 from insight_engine.research.service import ResearchWorkbenchService
 
-SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
+SAMPLES = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 
 
 def test_keyword_filter_and_versioning(db_conn, tmp_settings):

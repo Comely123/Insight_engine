@@ -8,7 +8,7 @@ from insight_engine.ingest.service import ImportService
 from insight_engine.llm.null_provider import NullLLMProvider
 from insight_engine.trends.metrics import compute_trend_metrics
 
-SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
+SAMPLES = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 
 
 def test_pipeline_rules_without_api_key(db_conn, tmp_settings, monkeypatch):

@@ -4,42 +4,36 @@
 
 ## 当前阶段
 
-**Phase 5（性能评估、可靠性强化与可选云端部署）— 实现完成，等待用户验收**
+**Phase 0–5 已验收**；正在推进**公开产品化**（上传/合规采集 → 报告；原文即删；会话归档）。
 
 ## 当前阶段状态
 
 | 项 | 状态 |
 |---|---|
-| 当前阶段 | Phase 5 |
-| 当前阶段状态 | `implementation_complete / awaiting_user_acceptance` |
-| 用户是否批准当前阶段验收 | **否** |
-| 云部署 | **未实施（决策：默认不上云）** |
+| 研究 MVP（Phase 0–5） | `all_phases_accepted` |
+| 公开产品源码 | 进行中 → 推送 Git |
+| 云部署（阿里云） | 待用户配合，未实施 |
+| ICP / 国内域名备案 | 待定（可后补） |
 
-## 已批准的阶段
+## 产品化交付清单
 
-| 阶段 | 状态 |
+| 项 | 状态 |
 |---|---|
-| Phase 0–4 | 验收通过 |
-| Phase 5 计划 | 已确认并实施（本地可靠性 + 决策文档 + git 远程） |
-| Phase 5 验收 | 待用户明确批准 |
+| 采集适配器（RSS + 多平台骨架） | 已完成 |
+| 分析后立即清除原文 | 已完成 |
+| 公开 3 步 UI + 报告展示 | 已完成 |
+| 管理端会话导出 | 已完成 |
+| 默认自部署模型 + 可选用户 API Key | 已完成 |
+| 删除捆绑示例数据 | 已完成 |
+| 推送 GitHub | 本提交 |
+| 测试 | `35 passed` |
 
-## 最近一次测试结果
+## 远程
 
-```text
-pytest -q → 34 passed in 8.37s
-bench_local.py：已生成 data/benchmarks/bench_result_*.json（单次基线，非 SLA）
-backup_db.py：integrity_check ok
-```
+https://github.com/Comely123/Insight_engine.git
 
-## Phase 5 已完成
+## 已知结转
 
-- SQLite 备份 / 完整性检查 / 恢复（Windows 友好 in-place restore）
-- 本地基准脚本 `scripts/bench_local.py`
-- 日志轮转 + 密钥脱敏
-- 媒体重复处理保护
-- `docs/OPS.md`、`docs/CLOUD_DECISION.md`
-- Git 远程：https://github.com/Comely123/Insight_engine.git
-
-## 下一步
-
-等待用户明确验收 Phase 5。验收通过即本项目分阶段 MVP 收官（不上云）。
+- 多平台正式采集需官方/授权 API，骨架已预留
+- 公开 RSS 命中率取决于关键词与源列表
+- 云上域名/备案/HTTPS 与用户另行配合

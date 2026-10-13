@@ -27,7 +27,7 @@ from insight_engine.search.fts import SearchFilters, search_documents
 from insight_engine.trends.metrics import compute_trend_metrics
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLES = ROOT / "data" / "samples"
+SAMPLES = ROOT / "tests" / "fixtures"
 log = get_logger("insight_engine.bench")
 
 

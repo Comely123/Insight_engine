@@ -12,7 +12,7 @@ def test_no_api_key_required_for_import_search_export(db_conn, tmp_settings, tmp
     monkeypatch.delenv("INSIGHT_LLM_API_KEY", raising=False)
     assert os.environ.get("INSIGHT_LLM_API_KEY") in (None, "")
 
-    sample = Path(__file__).resolve().parents[1] / "data" / "samples" / "pet_blessing_sample.json"
+    sample = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "pet_blessing_sample.json"
     service = ImportService(db_conn, tmp_settings)
     result = service.import_file(sample, save_copy=False)
     assert result.row_count_imported == 3

@@ -19,9 +19,13 @@ from insight_engine.models.documents import PermissionStatus
 def main() -> None:
     settings = get_settings()
     initialize_database(settings)
-    samples = sorted(settings.samples_dir.glob("*"))
+    # Product no longer ships demo corpora under data/samples.
+    # Prefer tests/fixtures for local smoke loads when present.
+    fixture_dir = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
+    samples = sorted(fixture_dir.glob("*")) if fixture_dir.exists() else []
+    samples = [p for p in samples if p.is_file()]
     if not samples:
-        print(f"No samples in {settings.samples_dir}")
+        print(f"No loadable fixtures in {fixture_dir} (data/samples is intentionally empty).")
         return
 
     with get_connection(settings.db_path) as conn:

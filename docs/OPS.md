@@ -36,6 +36,18 @@ python scripts\bench_local.py
 同一 `media_id` 若已有成功处理记录，默认跳过再次处理。  
 强制重跑：处理时使用 `force=True` 或 `allow_reprocess=True`。
 
-## 密钥
+## 密钥与模型
 
-仅通过环境变量或本地 `.env`（勿提交）。见 `.env.example`。
+仅通过环境变量、本地 `.env` 或公开站会话输入（勿提交）。见 `.env.example`。
+
+- 默认自部署：`INSIGHT_LLM_BASE_URL`（默认 `http://127.0.0.1:11434/v1`）+ `INSIGHT_LLM_MODEL`
+- 可选用户自有 Key：UI 会话填写，或 `INSIGHT_LLM_API_KEY`
+
+## 公开站与管理端
+
+```powershell
+.\scripts\run_public.ps1
+.\scripts\run_admin.ps1
+```
+
+原文清除：`ops/ephemeral.py` 在公开流水线分析后执行。归档表：`search_sessions`。

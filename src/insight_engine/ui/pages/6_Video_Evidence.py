@@ -57,15 +57,6 @@ perm = st.selectbox(
 uploaded = st.file_uploader("视频/音频文件", type=["mp4", "mov", "mkv", "webm", "mp3", "wav", "m4a"])
 sub_uploaded = st.file_uploader("可选字幕 SRT/VTT", type=["srt", "vtt"])
 copy_flag = st.checkbox("复制到 data/media（默认仅记录本地路径）", value=False)
-sample_dir = settings.samples_dir / "media"
-sample_choice = None
-if sample_dir.exists():
-    samples = sorted(sample_dir.glob("*.mp4")) + sorted(sample_dir.glob("*.wav"))
-    labels = ["（不使用示例）"] + [p.name for p in samples]
-    pick = st.selectbox("或选择示例媒体", labels)
-    if pick != "（不使用示例）":
-        sample_choice = sample_dir / pick
-
 if st.button("导入媒体", type="primary"):
     settings.ensure_directories()
     target: Path | None = None
@@ -74,18 +65,12 @@ if st.button("导入媒体", type="primary"):
         if uploaded is not None:
             target = settings.media_dir / f"_upload_{uploaded.name}"
             target.write_bytes(uploaded.getvalue())
-        elif sample_choice is not None:
-            target = sample_choice
         else:
-            st.error("请上传文件或选择示例")
+            st.error("请上传视频/音频文件")
             st.stop()
         if sub_uploaded is not None:
             sub_path = settings.media_dir / f"_sub_{sub_uploaded.name}"
             sub_path.write_bytes(sub_uploaded.getvalue())
-        elif sample_choice is not None:
-            guess = sample_choice.with_suffix(".srt")
-            if guess.exists():
-                sub_path = guess
 
         with get_connection() as conn:
             asset = MediaIngestService(conn, settings).import_media(

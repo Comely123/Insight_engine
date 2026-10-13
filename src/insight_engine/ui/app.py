@@ -59,7 +59,7 @@ def main() -> None:
     if stats["recent_batches"]:
         st.dataframe(stats["recent_batches"], width="stretch")
     else:
-        st.info("尚无导入记录。请打开左侧「数据导入」页面，或导入 data/samples 中的示例文件。")
+        st.info("尚无导入记录。请打开左侧「数据导入」页面，或使用公开站上传自有数据。")
 
     with get_connection() as conn:
         errors = DocumentRepository(conn).list_import_errors(limit=50)
