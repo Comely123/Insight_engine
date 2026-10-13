@@ -7,11 +7,15 @@ from pathlib import Path
 
 
 def _find_cjk_font() -> Path | None:
+    # Prefer single-face TTF; some TTC faces break fpdf2 width metrics without margins.
     candidates = [
+        Path(r"C:\Windows\Fonts\simhei.ttf"),
+        Path(r"C:\Windows\Fonts\simkai.ttf"),
+        Path(r"C:\Windows\Fonts\msyhbd.ttc"),
+        Path(r"C:\Windows\Fonts\simsun.ttc"),
         Path(r"C:\Windows\Fonts\msyh.ttc"),
         Path(r"C:\Windows\Fonts\msyh.ttf"),
-        Path(r"C:\Windows\Fonts\simhei.ttf"),
-        Path(r"C:\Windows\Fonts\simsun.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
         Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
         Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
         Path("/System/Library/Fonts/PingFang.ttc"),
@@ -20,6 +24,17 @@ def _find_cjk_font() -> Path | None:
         if p.exists():
             return p
     return None
+
+
+def _clean_line(line: str) -> str:
+    return (
+        (line or "")
+        .replace("\t", " ")
+        .replace("**", "")
+        .replace("`", "")
+        .replace("\u200b", "")
+        .strip()
+    )
 
 
 def markdown_to_pdf_bytes(text: str, *, title: str = "分析报告") -> bytes:
@@ -31,28 +46,34 @@ def markdown_to_pdf_bytes(text: str, *, title: str = "分析报告") -> bytes:
 
     font = _find_cjk_font()
     if font is None:
-        raise RuntimeError("未找到中文字体，无法生成 PDF（Windows 需微软雅黑/黑体）")
+        raise RuntimeError("未找到中文字体，无法生成 PDF（Windows 需黑体/楷体）")
 
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf = FPDF(format="A4", unit="mm")
+    pdf.set_margins(left=18, top=18, right=18)
+    pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
-    # ttc needs uni=True style in fpdf2
-    pdf.add_font("zh", fname=str(font))
-    pdf.set_font("zh", size=14)
-    pdf.multi_cell(0, 10, title)
-    pdf.ln(4)
-    pdf.set_font("zh", size=10)
-    # Normalize markdown-ish to plain-ish lines
+    pdf.add_font("zh", "", str(font))
+    width = float(pdf.epw)
+
+    pdf.set_font("zh", size=16)
+    pdf.multi_cell(width, 10, _clean_line(title) or "分析报告")
+    pdf.ln(3)
+
     body = (text or "").replace("\r\n", "\n")
-    for line in body.split("\n"):
-        line = line.replace("**", "").replace("`", "")
-        if line.startswith("#"):
-            line = line.lstrip("#").strip()
-            pdf.set_font("zh", size=12)
-            pdf.multi_cell(0, 8, line or " ")
+    for raw in body.split("\n"):
+        line = _clean_line(raw)
+        if not line:
+            pdf.ln(3)
+            continue
+        if raw.lstrip().startswith("#"):
+            pdf.set_font("zh", size=13)
+            pdf.multi_cell(width, 8, line.lstrip("#").strip() or " ")
             pdf.set_font("zh", size=10)
+            pdf.ln(1)
         else:
-            pdf.multi_cell(0, 6, line if line.strip() else " ")
+            pdf.set_font("zh", size=10)
+            pdf.multi_cell(width, 6, line)
+
     buf = BytesIO()
     pdf.output(buf)
     return buf.getvalue()

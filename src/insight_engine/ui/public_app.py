@@ -11,7 +11,6 @@ _SRC = Path(__file__).resolve().parents[2]
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-import pandas as pd
 import streamlit as st
 
 from insight_engine.collectors.registry import list_collector_cards
@@ -19,6 +18,7 @@ from insight_engine.db.connection import initialize_database
 from insight_engine.export.pdf_report import markdown_to_pdf_bytes
 from insight_engine.product.pipeline import DEFAULT_BRIEF, PublicAnalysisService
 from insight_engine.reports.builder import render_markdown
+from insight_engine.ui.charts import macaron_bar
 from insight_engine.ui.theme import PUBLIC_CSS
 
 st.set_page_config(
@@ -96,12 +96,11 @@ def page_collect() -> None:
             return
         default_ids = [c["id"] for c in cards if c["enabled_by_default"]] or [cards[0]["id"]]
         collector_ids = st.multiselect(
-            "采集源（仅显示已开放源）",
+            "采集源",
             options=[c["id"] for c in cards],
             default=default_ids,
             format_func=lambda i: next(c["name"] for c in cards if c["id"] == i),
         )
-        st.caption("当前开放：公开资讯文本检索。短视频/社交平台需官方授权 API 后才会出现在此列表。")
 
     keywords_raw = st.text_input(
         "检索关键词（多个用逗号分隔）",
@@ -131,7 +130,6 @@ def page_collect() -> None:
             llm_base = st.text_input("Base URL", value="https://api.deepseek.com/v1")
             llm_model = st.text_input("模型名", value="deepseek-chat")
         elif provider == "deepseek":
-            st.caption("DeepSeek 只用于报告增强分析，不会替你爬网页。")
             llm_base = "https://api.deepseek.com/v1"
             llm_model = "deepseek-chat"
         llm_key = ""
@@ -140,7 +138,7 @@ def page_collect() -> None:
         elif provider == "local":
             llm_key = st.text_input("可选本地 Key", type="password", value="local")
 
-    if st.button("采集并生成报告", type="primary", use_container_width=True):
+    if st.button("采集并生成报告", type="primary", width="stretch"):
         keywords = _split_keywords(keywords_raw)
         paths: list[Path] = []
         tmp_dir = None
@@ -223,25 +221,27 @@ def page_report() -> None:
 
     left, right = st.columns(2)
     with left:
-        st.markdown("#### 行为阶段")
-        behavior = stats.get("behavior_stage_counts") or {}
-        if behavior:
-            st.bar_chart(pd.Series(behavior, name="数量"))
-        st.markdown("#### 需求类型")
-        subtype = stats.get("demand_subtype_counts") or {}
-        if subtype:
-            st.bar_chart(pd.Series(subtype, name="数量"))
+        macaron_bar(
+            stats.get("behavior_stage_counts"),
+            title="行为阶段",
+            alt_text="行为阶段分布柱状图",
+        )
+        macaron_bar(
+            stats.get("demand_subtype_counts"),
+            title="需求类型",
+            alt_text="需求类型分布柱状图",
+        )
     with right:
-        st.markdown("#### 正反声音")
-        stance = stats.get("stance_counts") or {}
-        if stance:
-            st.bar_chart(pd.Series(stance, name="数量"))
-        st.markdown("#### 价格区间")
-        buckets = stats.get("price_buckets") or {}
-        if buckets:
-            st.bar_chart(pd.Series(buckets, name="数量"))
-        elif stats.get("price_values"):
-            st.write(stats.get("price_values"))
+        macaron_bar(
+            stats.get("stance_counts"),
+            title="正反声音",
+            alt_text="正反声音分布柱状图",
+        )
+        macaron_bar(
+            stats.get("price_buckets"),
+            title="价格区间",
+            alt_text="价格区间分布柱状图",
+        )
 
     for a in narrative.get("alerts") or []:
         st.markdown(f"- **{a.get('title')}** — {a.get('reason')}")
@@ -254,7 +254,7 @@ def page_report() -> None:
             data=md_text,
             file_name="insight_report.md",
             mime="text/markdown",
-            use_container_width=True,
+            width="stretch",
         )
     with d2:
         try:
@@ -264,10 +264,10 @@ def page_report() -> None:
                 data=pdf_bytes,
                 file_name="insight_report.pdf",
                 mime="application/pdf",
-                use_container_width=True,
+                width="stretch",
             )
         except Exception as exc:  # noqa: BLE001
-            st.caption(f"PDF 暂不可用：{exc}")
+            st.error(f"PDF 导出失败：{exc}")
 
 
 # Two-page nav only (workbench multipage lives under ui/workbench/)
