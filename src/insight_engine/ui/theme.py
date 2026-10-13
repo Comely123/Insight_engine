@@ -12,7 +12,19 @@ html, body, [class*="css"]  {
   color: #1a1a1a;
 }
 h1, h2, h3 { color: #111 !important; letter-spacing: -0.02em; }
-.block-container { padding-top: 1.5rem; max-width: 980px; }
+.block-container { padding-top: 1.5rem; max-width: 1040px; }
+/* Avoid Vega/Altair title and axis labels looking clipped */
+div[data-testid="stVegaLiteChart"],
+div[data-testid="stArrowVegaLiteChart"] {
+  overflow: visible !important;
+  padding: 0.35rem 0.25rem 0.75rem 0.25rem;
+}
+div[data-testid="stVegaLiteChart"] svg,
+div[data-testid="stArrowVegaLiteChart"] svg {
+  overflow: visible !important;
+}
+.stAlert { border-radius: 12px; }
+
 div[data-testid="stMetric"] {
   background: #fff;
   border: 1px solid #e8e8e8;

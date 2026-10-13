@@ -5,6 +5,7 @@ from insight_engine.product.uploads import classify_upload, pair_captions
 
 def test_classify_text_media_caption() -> None:
     assert classify_upload(Path("a.csv")) == "text"
+    assert classify_upload(Path("paper.pdf")) == "text"
     assert classify_upload(Path("a.mp4")) == "media"
     assert classify_upload(Path("a.mp3")) == "media"
     assert classify_upload(Path("a.srt")) == "caption"

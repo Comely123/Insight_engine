@@ -22,6 +22,12 @@ from insight_engine.media.subtitles import load_subtitle_file
 from insight_engine.models.documents import PermissionStatus
 from insight_engine.ops.ephemeral import delete_path_quietly, wipe_raw_document_bodies
 from insight_engine.ops.logging_util import get_logger
+from insight_engine.product.narrative import (
+    build_rule_narrative,
+    enrich_narrative_with_llm,
+    narrative_to_markdown,
+)
+from insight_engine.product.pdf_extract import extract_pdf_text
 from insight_engine.product.uploads import pair_captions
 from insight_engine.reports.builder import build_research_report, export_report
 from insight_engine.research.service import ResearchWorkbenchService
@@ -59,21 +65,32 @@ class PublicAnalysisService:
         window_days: int = 90,
     ) -> dict[str, Any]:
         keywords = [k.strip() for k in keywords if k.strip()]
-        if not keywords:
-            raise ValueError("请至少填写一个关键词")
-        brief = (research_brief or DEFAULT_BRIEF).strip()
+        if mode == "collect" and not keywords:
+            raise ValueError("网络采集请填写至少一个关键词")
+        brief = (research_brief or "").strip()
         session_id = str(uuid.uuid4())
         collector_ids = collector_ids or (
             ["news_search_rss"] if mode == "collect" else []
         )
 
+        base = (llm_base_url or "").lower()
+        prefer_local = use_llm and not (llm_api_key or "").strip() and (
+            "127.0.0.1" in base or "localhost" in base or base == ""
+        )
         llm = get_llm_provider(
             api_key=llm_api_key,
             base_url=llm_base_url,
             model=llm_model,
-            prefer_local=True,
+            prefer_local=prefer_local,
         )
-        llm_mode = "user_key" if llm_api_key else ("local_default" if use_llm else "rules_only")
+        if not use_llm:
+            llm_mode = "rules_only"
+        elif llm_api_key:
+            llm_mode = "user_key"
+        elif prefer_local:
+            llm_mode = "local_default"
+        else:
+            llm_mode = "cloud_needs_key"
 
         doc_ids: list[str] = []
         ingest_notes: list[str] = []
@@ -92,23 +109,36 @@ class PublicAnalysisService:
                     ingest_notes.append(f"{path.name}: 不支持的文件类型，已跳过")
 
                 for path in text_paths:
-                    if path.suffix.lower() in {".srt", ".vtt"}:
-                        try:
+                    import_path = path
+                    try:
+                        if path.suffix.lower() in {".srt", ".vtt"}:
                             cues = load_subtitle_file(path)
                             body = "\n".join(c.text for c in cues if c.text)
                             if not body.strip():
                                 ingest_notes.append(f"{path.name}: 字幕为空")
                                 continue
-                            tmp = Path(tempfile.mkdtemp(prefix="insight_cap_")) / f"{path.stem}.json"
+                            content_type = "subtitle"
+                            title = path.name
+                        elif path.suffix.lower() == ".pdf":
+                            body = extract_pdf_text(path)
+                            content_type = "literature_pdf"
+                            title = path.stem
+                        else:
+                            body = None
+                            content_type = None
+                            title = path.name
+
+                        if body is not None:
+                            tmp = Path(tempfile.mkdtemp(prefix="insight_doc_")) / f"{path.stem}.json"
                             tmp.write_text(
                                 json.dumps(
                                     {
                                         "documents": [
                                             {
-                                                "title": path.name,
+                                                "title": title,
                                                 "content": body,
                                                 "source_name": f"upload:{path.name}",
-                                                "content_type": "subtitle",
+                                                "content_type": content_type,
                                             }
                                         ]
                                     },
@@ -118,11 +148,10 @@ class PublicAnalysisService:
                             )
                             temp_files.append(tmp)
                             import_path = tmp
-                        except Exception as exc:  # noqa: BLE001
-                            ingest_notes.append(f"{path.name}: 字幕解析失败 {exc}")
-                            continue
-                    else:
-                        import_path = path
+                    except Exception as exc:  # noqa: BLE001
+                        ingest_notes.append(f"{path.name}: 解析失败 {exc}")
+                        continue
+
                     result = importer.import_file(
                         import_path,
                         source_name=f"upload:{path.name}",
@@ -349,18 +378,26 @@ class PublicAnalysisService:
                 report=trend,
                 alerts=[a.model_dump() for a in alerts],
             )
-            # Enrich narrative sections for public report
-            report_payload["public_narrative"] = self._build_public_narrative(
+            narrative = build_rule_narrative(
+                conn=conn,
+                document_ids=doc_ids,
                 keywords=keywords,
                 brief=brief,
                 trend=trend.to_dict(),
                 alerts=[a.model_dump() for a in alerts],
+                mode=mode,
             )
+            if use_llm:
+                narrative = enrich_narrative_with_llm(narrative, llm=llm)
+            report_payload["public_narrative"] = narrative
 
             out_dir = self.settings.data_dir / "exports" / "public_reports" / session_id
             paths = export_report(
                 conn, report_payload, out_dir=out_dir, basename="report"
             )
+            public_md = out_dir / "public_narrative.md"
+            public_md.write_text(narrative_to_markdown(narrative), encoding="utf-8")
+            paths["public_markdown"] = public_md
 
             # Ephemeral wipe of raw bodies
             wiped = wipe_raw_document_bodies(conn, doc_ids)
@@ -420,56 +457,3 @@ class PublicAnalysisService:
             "llm_mode": llm_mode,
         }
 
-    def _build_public_narrative(
-        self,
-        *,
-        keywords: list[str],
-        brief: str,
-        trend: dict[str, Any],
-        alerts: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        unique = int(trend.get("unique_documents") or 0)
-        sources = int(trend.get("independent_sources") or 0)
-        behavior = trend.get("behavior_stage_counts") or {}
-        subtype = trend.get("demand_subtype_counts") or {}
-        stance = trend.get("stance_counts") or {}
-        prices = trend.get("price_values") or []
-
-        # Data-tier positioning (not subjective innovation score)
-        if unique < 5 or sources <= 1:
-            tier = "样本不足：仅能看作零星讨论线索，不能定位为可规模化市场信号"
-        elif behavior.get("payment", 0) + behavior.get("fulfillment", 0) > 0 and sources >= 3:
-            tier = "已出现付款/履约类证据，但仍偏小众验证阶段"
-        elif behavior.get("purchase_intent", 0) + behavior.get("price_inquiry", 0) > 0:
-            tier = "以兴趣与询价为主，商业化仍处早期试探"
-        else:
-            tier = "以一般讨论/兴趣表达为主，尚未形成稳定交易证据链"
-
-        return {
-            "one_liner": tier,
-            "scope": "中国国内样本口径（当前接入：用户上传 + 合规 RSS/预留平台适配器）",
-            "keywords": keywords,
-            "research_brief": brief,
-            "degree_positioning": tier,
-            "stats": {
-                "raw_documents": trend.get("raw_documents"),
-                "unique_documents": unique,
-                "independent_sources": sources,
-                "independent_events": trend.get("independent_events"),
-                "behavior_stage_counts": behavior,
-                "demand_subtype_counts": subtype,
-                "stance_counts": stance,
-                "price_values": prices,
-                "price_buckets": trend.get("price_buckets"),
-            },
-            "alerts": [
-                {"title": a.get("title"), "reason": a.get("trigger_reason"), "severity": a.get("severity")}
-                for a in alerts
-            ],
-            "warnings": trend.get("warnings") or [],
-            "disclaimer": (
-                "结论基于本次检索样本的描述性统计与证据摘录；"
-                "不是投资建议，也不提供主观创新打分。"
-                "原文在分析完成后已按策略清除，仅保留结构化成果与短摘录。"
-            ),
-        }

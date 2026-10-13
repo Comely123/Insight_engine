@@ -1,8 +1,8 @@
-"""Macaron Altair charts with Chinese labels for the public report page."""
+"""Richer macaron Altair charts (no clipped titles; mixed mark types)."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import altair as alt
 import pandas as pd
@@ -36,10 +36,11 @@ LABEL_ZH: dict[str, str] = {
     "200-": "200元以上",
 }
 
+ChartKind = Literal["hbar", "donut", "area"]
+
 
 def _zh(key: Any) -> str:
-    s = str(key)
-    return LABEL_ZH.get(s, s)
+    return LABEL_ZH.get(str(key), str(key))
 
 
 def counts_to_frame(counts: dict[str, Any] | None) -> pd.DataFrame:
@@ -48,42 +49,90 @@ def counts_to_frame(counts: dict[str, Any] | None) -> pd.DataFrame:
     rows = [{"类别": _zh(k), "数量": int(v)} for k, v in counts.items() if int(v) > 0]
     if not rows:
         return pd.DataFrame(columns=["类别", "数量"])
-    return pd.DataFrame(rows).sort_values("数量", ascending=False)
+    return pd.DataFrame(rows).sort_values("数量", ascending=True)
 
 
-def macaron_bar(counts: dict[str, Any] | None, *, title: str, alt_text: str) -> None:
+def _colors(n: int) -> list[str]:
+    return (MACARON * ((n // len(MACARON)) + 1))[:n]
+
+
+def render_distribution(
+    counts: dict[str, Any] | None,
+    *,
+    title: str,
+    kind: ChartKind = "hbar",
+    alt_text: str | None = None,
+) -> None:
+    st.markdown(f"**{title}**")
     df = counts_to_frame(counts)
     if df.empty:
         st.caption("暂无数据")
         return
-    colors = MACARON * ((len(df) // len(MACARON)) + 1)
-    chart = (
-        alt.Chart(df)
-        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, size=28)
-        .encode(
-            x=alt.X(
-                "类别:N",
-                sort="-y",
-                title=None,
-                axis=alt.Axis(labelAngle=0, labelFontSize=12, labelColor="#444"),
-            ),
-            y=alt.Y(
-                "数量:Q",
-                title=None,
-                axis=alt.Axis(grid=True, gridColor="#eee", tickCount=4, labelFontSize=11),
-            ),
-            color=alt.Color(
-                "类别:N",
-                scale=alt.Scale(range=colors[: len(df)]),
-                legend=None,
-            ),
-            tooltip=[
-                alt.Tooltip("类别:N", title="类别"),
-                alt.Tooltip("数量:Q", title="数量"),
-            ],
+
+    colors = _colors(len(df))
+    height = max(180, 36 * len(df) + 40)
+
+    if kind == "donut":
+        chart = (
+            alt.Chart(df)
+            .mark_arc(innerRadius=48, outerRadius=84, stroke="#fff", strokeWidth=2)
+            .encode(
+                theta=alt.Theta("数量:Q", stack=True),
+                color=alt.Color(
+                    "类别:N",
+                    scale=alt.Scale(range=colors),
+                    legend=alt.Legend(orient="bottom", title=None, labelFontSize=11),
+                ),
+                tooltip=["类别:N", "数量:Q"],
+            )
+            .properties(height=260, padding={"left": 8, "right": 8, "top": 8, "bottom": 8})
+            .configure_view(strokeWidth=0)
         )
-        .properties(height=220, title=alt.TitleParams(text=title, fontSize=14, color="#222", anchor="start"))
-        .configure_view(strokeWidth=0)
-        .configure_axis(domainColor="#ddd")
-    )
-    st.altair_chart(chart, width="stretch", alt=alt_text)
+    elif kind == "area":
+        # Ranked soft points + area for visual variety on ordered buckets
+        ordered = df.sort_values("数量", ascending=False)
+        chart = (
+            alt.Chart(ordered)
+            .mark_area(
+                interpolate="monotone",
+                opacity=0.55,
+                color=MACARON[2],
+                line={"color": MACARON[3]},
+            )
+            .encode(
+                x=alt.X("类别:N", sort="-y", title=None, axis=alt.Axis(labelAngle=-25, labelLimit=120)),
+                y=alt.Y("数量:Q", title=None, axis=alt.Axis(grid=True, gridColor="#eee")),
+                tooltip=["类别:N", "数量:Q"],
+            )
+            .properties(height=240, padding={"left": 12, "right": 12, "top": 10, "bottom": 30})
+            .configure_view(strokeWidth=0)
+        )
+    else:
+        chart = (
+            alt.Chart(df)
+            .mark_bar(cornerRadiusEnd=8, height=18)
+            .encode(
+                y=alt.Y(
+                    "类别:N",
+                    sort="-x",
+                    title=None,
+                    axis=alt.Axis(labelFontSize=12, labelColor="#333", labelLimit=160, domain=False),
+                ),
+                x=alt.X(
+                    "数量:Q",
+                    title=None,
+                    axis=alt.Axis(grid=True, gridColor="#f0f0f0", tickCount=4, domainColor="#ddd"),
+                ),
+                color=alt.Color("类别:N", scale=alt.Scale(range=colors), legend=None),
+                tooltip=["类别:N", "数量:Q"],
+            )
+            .properties(height=height, padding={"left": 4, "right": 16, "top": 8, "bottom": 8})
+            .configure_view(strokeWidth=0)
+        )
+
+    st.altair_chart(chart, width="stretch", alt=alt_text or title)
+
+
+# Back-compat alias
+def macaron_bar(counts: dict[str, Any] | None, *, title: str, alt_text: str) -> None:
+    render_distribution(counts, title=title, kind="hbar", alt_text=alt_text)

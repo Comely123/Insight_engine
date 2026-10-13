@@ -12,6 +12,7 @@ TEXT_EXTENSIONS = {
     ".markdown",
     ".log",
     ".text",
+    ".pdf",
 }
 CAPTION_EXTENSIONS = {".srt", ".vtt"}
 MEDIA_EXTENSIONS = {

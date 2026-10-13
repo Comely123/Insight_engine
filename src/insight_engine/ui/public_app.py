@@ -16,14 +16,14 @@ import streamlit as st
 from insight_engine.collectors.registry import list_collector_cards
 from insight_engine.db.connection import initialize_database
 from insight_engine.export.pdf_report import markdown_to_pdf_bytes
-from insight_engine.product.pipeline import DEFAULT_BRIEF, PublicAnalysisService
-from insight_engine.reports.builder import render_markdown
-from insight_engine.ui.charts import macaron_bar
+from insight_engine.product.narrative import narrative_to_markdown
+from insight_engine.product.pipeline import PublicAnalysisService
+from insight_engine.ui.charts import render_distribution
 from insight_engine.ui.theme import PUBLIC_CSS
 
 st.set_page_config(
     page_title="活动洞察",
-    page_icon="◆",
+    page_icon=":material/insights:",
     layout="centered",
     initial_sidebar_state="expanded",
 )
@@ -46,52 +46,38 @@ def _split_keywords(text: str) -> list[str]:
 
 def _report_markdown(result: dict) -> str:
     report = result.get("report") or {}
-    md_path = (result.get("report_paths") or {}).get("markdown")
-    if md_path and Path(md_path).exists():
-        return Path(md_path).read_text(encoding="utf-8")
-    if report:
-        try:
-            return render_markdown(report)
-        except Exception:  # noqa: BLE001
-            pass
     narrative = report.get("public_narrative") or {}
-    return "\n".join(
-        [
-            f"# {narrative.get('one_liner', '分析报告')}",
-            "",
-            narrative.get("degree_positioning", ""),
-            "",
-            narrative.get("disclaimer", ""),
-        ]
-    )
+    public_path = (result.get("report_paths") or {}).get("public_markdown")
+    if public_path and Path(public_path).exists():
+        return Path(public_path).read_text(encoding="utf-8")
+    if narrative:
+        return narrative_to_markdown(narrative)
+    return "# 分析报告\n"
 
 
 def page_collect() -> None:
     st.markdown("## 数据采集")
-    st.markdown(
-        '<p class="muted">上传文件，或使用当前已开放的公开资讯源按关键词采集。'
-        "分析完成后原文会立即清除。</p>",
-        unsafe_allow_html=True,
-    )
 
     mode = st.radio(
         "数据来源",
         options=["upload", "collect"],
         format_func=lambda x: "批量上传文件" if x == "upload" else "公开网络采集",
         horizontal=True,
+        label_visibility="collapsed",
     )
 
     uploaded = None
     collector_ids: list[str] = []
     if mode == "upload":
         uploaded = st.file_uploader(
-            "上传文件（可多选：文字 / 音频 / 视频）",
+            "上传文件（文字 / PDF 文献 / 音频 / 视频，可多选）",
             type=[
                 "csv",
                 "json",
                 "txt",
                 "md",
                 "log",
+                "pdf",
                 "srt",
                 "vtt",
                 "mp4",
@@ -121,17 +107,24 @@ def page_collect() -> None:
         )
 
     keywords_raw = st.text_input(
-        "检索关键词（多个用逗号分隔）",
-        value="宠物毛发,祈福,编织,福袋,纪念",
+        "检索关键词（多个用逗号分隔；上传文献可留空）",
+        value="",
+        placeholder="例如：宠物毛发, 祈福",
     )
-    brief = st.text_area("研究说明（可改）", value=DEFAULT_BRIEF, height=120)
+    brief = st.text_area(
+        "研究说明",
+        value="",
+        height=100,
+        placeholder="可选：说明你想关注的问题、市场范围或文献分析目标",
+    )
 
-    with st.expander("模型设置（可选）"):
+    with st.expander("模型设置"):
         provider = st.selectbox(
             "分析模型",
-            options=["rules", "deepseek", "local", "custom"],
+            options=["rules", "openai", "deepseek", "local", "custom"],
             format_func=lambda x: {
                 "rules": "仅规则统计（不调用大模型）",
+                "openai": "OpenAI（ChatGPT API）",
                 "deepseek": "DeepSeek API",
                 "local": "本机/自部署 OpenAI 兼容接口",
                 "custom": "自定义 OpenAI 兼容接口",
@@ -139,24 +132,28 @@ def page_collect() -> None:
             index=0,
         )
         use_llm = provider != "rules"
-        llm_base = "https://api.deepseek.com/v1"
-        llm_model = "deepseek-chat"
-        if provider == "local":
-            llm_base = st.text_input("Base URL", value="http://127.0.0.1:11434/v1")
-            llm_model = st.text_input("模型名", value="qwen2.5:7b")
-        elif provider == "custom":
-            llm_base = st.text_input("Base URL", value="https://api.deepseek.com/v1")
-            llm_model = st.text_input("模型名", value="deepseek-chat")
+        llm_base = "https://api.openai.com/v1"
+        llm_model = "gpt-4o-mini"
+        if provider == "openai":
+            llm_base = "https://api.openai.com/v1"
+            llm_model = st.selectbox("OpenAI 模型", ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"])
         elif provider == "deepseek":
             llm_base = "https://api.deepseek.com/v1"
             llm_model = "deepseek-chat"
+        elif provider == "local":
+            llm_base = st.text_input("Base URL", value="http://127.0.0.1:11434/v1")
+            llm_model = st.text_input("模型名", value="qwen2.5:7b")
+        elif provider == "custom":
+            llm_base = st.text_input("Base URL", value="https://api.openai.com/v1")
+            llm_model = st.text_input("模型名", value="gpt-4o-mini")
+
         llm_key = ""
         if use_llm and provider != "local":
-            llm_key = st.text_input("API Key（仅本次会话）", type="password", value="")
+            llm_key = st.text_input("API Key（仅本次会话，不会写入仓库）", type="password", value="")
         elif provider == "local":
             llm_key = st.text_input("可选本地 Key", type="password", value="local")
 
-    if st.button("采集并生成报告", type="primary", width="stretch"):
+    if st.button("开始分析", type="primary", width="stretch"):
         keywords = _split_keywords(keywords_raw)
         paths: list[Path] = []
         tmp_dir = None
@@ -173,8 +170,11 @@ def page_collect() -> None:
             elif not collector_ids:
                 st.error("请至少选择一个采集源")
                 st.stop()
+            elif not keywords:
+                st.error("网络采集请填写关键词")
+                st.stop()
 
-            with st.spinner("正在采集与分析…"):
+            with st.spinner("正在分析…"):
                 result = PublicAnalysisService().run(
                     mode=mode,
                     keywords=keywords,
@@ -190,10 +190,8 @@ def page_collect() -> None:
             st.session_state["last_report"] = result
             if result.get("status") == "empty":
                 st.warning(result.get("message"))
-                for n in result.get("ingest_notes") or []:
-                    st.caption(n)
             else:
-                st.success("完成。请打开左侧「分析报告」查看与导出。")
+                st.success("完成。请打开左侧「分析报告」。")
         except Exception as exc:  # noqa: BLE001
             st.error(str(exc))
         finally:
@@ -215,8 +213,6 @@ def page_report() -> None:
 
     if result.get("status") == "empty":
         st.warning(result.get("message") or "未采集到数据")
-        for n in result.get("ingest_notes") or []:
-            st.caption(n)
         return
 
     if not result.get("report"):
@@ -225,7 +221,6 @@ def page_report() -> None:
 
     narrative = result["report"].get("public_narrative") or {}
     st.markdown(f"### {narrative.get('one_liner', '分析结果')}")
-    st.caption(narrative.get("disclaimer", ""))
 
     stats = narrative.get("stats") or {}
     c1, c2, c3, c4 = st.columns(4)
@@ -237,28 +232,46 @@ def page_report() -> None:
     st.markdown("#### 程度定位")
     st.info(narrative.get("degree_positioning", ""))
 
+    st.markdown("#### 主要发现")
+    for x in narrative.get("findings") or []:
+        st.markdown(f"- {x}")
+
+    st.markdown("#### 参考建议")
+    for x in narrative.get("recommendations") or []:
+        st.markdown(f"- {x}")
+
+    lit = narrative.get("literature_commonality") or []
+    if lit:
+        st.markdown("#### 文献 / 样本共性")
+        for x in lit:
+            st.markdown(f"- {x}")
+
     left, right = st.columns(2)
     with left:
-        macaron_bar(
+        render_distribution(
             stats.get("behavior_stage_counts"),
             title="行为阶段",
-            alt_text="行为阶段分布柱状图",
+            kind="hbar",
+            alt_text="行为阶段分布",
         )
-        macaron_bar(
+        render_distribution(
             stats.get("demand_subtype_counts"),
             title="需求类型",
-            alt_text="需求类型分布柱状图",
+            kind="donut",
+            alt_text="需求类型分布",
         )
     with right:
-        macaron_bar(
+        render_distribution(
             stats.get("stance_counts"),
             title="正反声音",
-            alt_text="正反声音分布柱状图",
+            kind="donut",
+            alt_text="正反声音分布",
         )
-        macaron_bar(
+        render_distribution(
             stats.get("price_buckets"),
             title="价格区间",
-            alt_text="价格区间分布柱状图",
+            kind="area",
+            alt_text="价格区间分布",
         )
 
     for a in narrative.get("alerts") or []:
@@ -276,7 +289,7 @@ def page_report() -> None:
         )
     with d2:
         try:
-            pdf_bytes = markdown_to_pdf_bytes(md_text, title="活动洞察报告")
+            pdf_bytes = markdown_to_pdf_bytes(md_text, title="分析报告")
             st.download_button(
                 "导出 PDF",
                 data=pdf_bytes,
@@ -288,7 +301,6 @@ def page_report() -> None:
             st.error(f"PDF 导出失败：{exc}")
 
 
-# Two-page nav only (workbench multipage lives under ui/workbench/)
 nav = st.navigation(
     [
         st.Page(page_collect, title="数据采集", icon=":material/upload_file:", default=True),

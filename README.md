@@ -35,11 +35,10 @@ streamlit run src\insight_engine\ui\workbench\app.py
 
 | 项 | 说明 |
 |---|---|
-| 数据来源 | 用户上传 + 已开放的公开资讯 RSS；未授权平台**不展示** |
+| 数据来源 | 用户上传（含 PDF 文献）+ 已开放公开资讯；未授权平台不展示 |
 | 原文策略 | 分析完成后**立即清除**正文；保留结构化结果与短摘录 |
-| 导出 | 报告页支持 Markdown / PDF |
-| 归档 | 匿名检索会话写入 `search_sessions`，管理端可导出 |
-| 模型 | 可选：规则 / DeepSeek / 自部署 / 自定义 Key（模型≠爬虫） |
+| 报告 | 文字发现/建议/文献共性 + 多种图表；可导出 MD/PDF |
+| 模型 | 规则 / **OpenAI** / DeepSeek / 自部署 / 自定义（会话填 Key） |
 | 云部署 | 优先阿里云；见 `docs/CLOUD_DECISION.md` |
 
 ## 历史阶段能力
