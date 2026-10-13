@@ -16,6 +16,7 @@ import streamlit as st
 from insight_engine.collectors.registry import list_collector_cards
 from insight_engine.db.connection import initialize_database
 from insight_engine.export.pdf_report import markdown_to_pdf_bytes
+from insight_engine.llm.presets import PRESETS, preset_by_id
 from insight_engine.product.narrative import narrative_to_markdown
 from insight_engine.product.pipeline import PublicAnalysisService
 from insight_engine.ui.charts import render_distribution
@@ -121,37 +122,43 @@ def page_collect() -> None:
     with st.expander("模型设置"):
         provider = st.selectbox(
             "分析模型",
-            options=["rules", "openai", "deepseek", "local", "custom"],
-            format_func=lambda x: {
-                "rules": "仅规则统计（不调用大模型）",
-                "openai": "OpenAI（ChatGPT API）",
-                "deepseek": "DeepSeek API",
-                "local": "本机/自部署 OpenAI 兼容接口",
-                "custom": "自定义 OpenAI 兼容接口",
-            }[x],
+            options=[p.id for p in PRESETS],
+            format_func=lambda i: next(p.label for p in PRESETS if p.id == i),
             index=0,
         )
+        preset = preset_by_id(provider)
+        assert preset is not None
         use_llm = provider != "rules"
-        llm_base = "https://api.openai.com/v1"
-        llm_model = "gpt-4o-mini"
-        if provider == "openai":
-            llm_base = "https://api.openai.com/v1"
-            llm_model = st.selectbox("OpenAI 模型", ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"])
-        elif provider == "deepseek":
-            llm_base = "https://api.deepseek.com/v1"
-            llm_model = "deepseek-chat"
-        elif provider == "local":
-            llm_base = st.text_input("Base URL", value="http://127.0.0.1:11434/v1")
-            llm_model = st.text_input("模型名", value="qwen2.5:7b")
-        elif provider == "custom":
-            llm_base = st.text_input("Base URL", value="https://api.openai.com/v1")
-            llm_model = st.text_input("模型名", value="gpt-4o-mini")
-
+        llm_base = preset.base_url
+        llm_model = preset.models[0] if preset.models else ""
         llm_key = ""
-        if use_llm and provider != "local":
-            llm_key = st.text_input("API Key（仅本次会话，不会写入仓库）", type="password", value="")
-        elif provider == "local":
-            llm_key = st.text_input("可选本地 Key", type="password", value="local")
+
+        if use_llm:
+            if provider in {"custom", "local", "doubao"}:
+                llm_base = st.text_input("Base URL", value=preset.base_url or "")
+            if provider == "custom":
+                llm_model = st.text_input("模型名", value=preset.models[0] if preset.models else "")
+            elif provider == "doubao":
+                llm_model = st.text_input(
+                    "方舟推理接入点 / 模型 ID",
+                    value="",
+                    placeholder="ep-xxxxxxxx 或控制台给出的模型名",
+                )
+            elif preset.models:
+                choices = list(preset.models) + ["（手动输入）"]
+                picked = st.selectbox("模型", choices)
+                if picked == "（手动输入）":
+                    llm_model = st.text_input("自定义模型名", value=preset.models[0])
+                else:
+                    llm_model = picked
+            if preset.note:
+                st.caption(preset.note)
+            if preset.needs_key or provider == "local":
+                llm_key = st.text_input(
+                    "API Key（仅本次会话）",
+                    type="password",
+                    value="local" if provider == "local" else "",
+                )
 
     if st.button("开始分析", type="primary", width="stretch"):
         keywords = _split_keywords(keywords_raw)

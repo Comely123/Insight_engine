@@ -34,11 +34,13 @@ def detect_format(path: Path) -> str:
         return "csv"
     if suffix == ".json":
         return "json"
+    if suffix == ".pdf":
+        return "pdf"
     if suffix in {".txt", ".md", ".markdown", ".log", ".text"}:
         return "txt"
     raise ValueError(
         f"Unsupported file type: {suffix or '(none)'}. "
-        "Use .csv, .json, .txt, .md, or audiovisual formats via the public upload pipeline."
+        "支持 .csv / .json / .txt / .md / .pdf，以及公开站音视频上传。"
     )
 
 
@@ -167,6 +169,20 @@ class ImportService:
             return read_json_rows(path)
         if content_type == "txt":
             return read_txt_as_rows(path)
+        if content_type == "pdf":
+            from insight_engine.product.pdf_extract import extract_pdf_text
+
+            text = extract_pdf_text(path)
+            return (
+                ["title", "content", "content_type"],
+                [
+                    {
+                        "title": path.stem,
+                        "content": text,
+                        "content_type": "literature_pdf",
+                    }
+                ],
+            )
         raise ValueError(f"Unsupported content_type: {content_type}")
 
     def _ingest_row(

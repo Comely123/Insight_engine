@@ -79,7 +79,8 @@ INSIGHT_ASR_MODEL=tiny
 | 数据来源 | 用户上传（含 PDF 文献）+ 已开放公开资讯；未授权平台不展示 |
 | 原文策略 | 分析完成后**立即清除**正文；保留结构化结果与短摘录 |
 | 报告 | 文字发现/建议/文献共性 + 多种图表；可导出 MD/PDF |
-| 模型 | 规则 / **OpenAI** / DeepSeek / 自部署 / 自定义（会话填 Key） |
+| 模型 | 规则 / OpenAI / DeepSeek / 通义 / 智谱 / Kimi / 豆包 / 混元 / 百川 / Yi / 硅基流动 / 自部署（会话填 Key） |
+| 上传 | 支持 PDF 文献（`pypdf` 抽文本）；扫描件纯图片 PDF 需先 OCR |
 | 云部署 | 优先阿里云；见 `docs/CLOUD_DECISION.md` |
 
 ## 历史阶段能力

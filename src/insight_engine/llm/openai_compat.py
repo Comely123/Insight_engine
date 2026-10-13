@@ -44,15 +44,53 @@ class OpenAICompatibleProvider(LLMProvider):
         if not self.available():
             raise RuntimeError("INSIGHT_LLM_API_KEY is not set")
 
-        payload = {
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt
+                + "\n请只输出一个 JSON 对象，不要 Markdown 代码块。",
+            },
+            {"role": "user", "content": user_prompt},
+        ]
+        # Some CN gateways reject response_format; try with it, then retry without.
+        body = self._post_chat(messages, temperature=temperature, force_json=True)
+        if body is None:
+            body = self._post_chat(messages, temperature=temperature, force_json=False)
+        if body is None:
+            raise RuntimeError("LLM HTTP error")
+
+        try:
+            content = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("LLM response missing choices/message/content") from exc
+
+        content = (content or "").strip()
+        if content.startswith("```"):
+            content = content.strip("`")
+            if content.startswith("json"):
+                content = content[4:].strip()
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("LLM returned non-JSON content") from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError("LLM JSON root must be an object")
+        return parsed
+
+    def _post_chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        force_json: bool,
+    ) -> dict[str, Any] | None:
+        payload: dict[str, Any] = {
             "model": self.model,
             "temperature": temperature,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": messages,
         }
+        if force_json:
+            payload["response_format"] = {"type": "json_object"}
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             f"{self.base_url}/chat/completions",
@@ -65,22 +103,10 @@ class OpenAICompatibleProvider(LLMProvider):
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
+                return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            # Do not include response body that might echo headers; keep message short.
+            if force_json and exc.code in {400, 404, 422}:
+                return None
             raise RuntimeError(f"LLM HTTP error: {exc.code}") from None
         except urllib.error.URLError as exc:
             raise RuntimeError(f"LLM network error: {exc.reason}") from None
-
-        try:
-            content = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError("LLM response missing choices/message/content") from exc
-
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("LLM returned non-JSON content") from exc
-        if not isinstance(parsed, dict):
-            raise RuntimeError("LLM JSON root must be an object")
-        return parsed
