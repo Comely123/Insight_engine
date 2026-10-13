@@ -1,6 +1,6 @@
 # Insight Engine
 
-本地优先的多源趋势研究引擎。公开产品形态：**上传或合规采集 → 关键词 → 完整报告**（中间分析过程对用户隐藏；分析后立即清除原文）。
+本地优先的多源趋势研究引擎。公开产品形态：**上传或合规采集 → 关键词 → 完整报告**（中间分析过程对用户隐藏；分析完成后立即清除原文）。
 
 代码仓库：[Comely123/Insight_engine](https://github.com/Comely123/Insight_engine)
 
@@ -18,6 +18,9 @@ streamlit run src\insight_engine\ui\public_app.py
 # 或: .\scripts\run_public.ps1
 ```
 
+> **说明**：上面这一步只装「基础能力」（上传文本/JSON/CSV、公开资讯采集、规则报告、PDF 文献文字提取、OpenAI/DeepSeek 会话 Key）。  
+> **音视频无字幕时的 ASR 转写、FFmpeg、OCR 不在基础安装里**，见下一节。
+
 管理端（检索归档导出，不对公众开放）：
 
 ```powershell
@@ -30,6 +33,44 @@ streamlit run src\insight_engine\ui\admin_app.py
 ```powershell
 streamlit run src\insight_engine\ui\workbench\app.py
 ```
+
+## 可选：音视频 ASR / FFmpeg / OCR（快速脚本）
+
+上传 **视频/音频** 且没有同名字幕（`.srt` / `.vtt`）时，系统会尝试 **ASR**（`faster-whisper`）。这需要额外系统组件与模型缓存。
+
+一键安装（推荐）：
+
+```powershell
+.\scripts\setup_media.ps1
+# 只要包装包、不预拉模型：
+.\scripts\setup_media.ps1 -SkipModelDownload
+# 换模型尺寸（默认 tiny，体积小）：
+.\scripts\setup_media.ps1 -ModelSize base
+```
+
+检查是否就绪：
+
+```powershell
+python scripts\check_media_deps.py
+```
+
+| 依赖 | 是否必须 | 用途 | 怎么装 |
+|---|---|---|---|
+| `requirements.txt` | 是 | 公开站、PDF 文献、报告导出 | `pip install -r requirements.txt` |
+| **FFmpeg**（`ffmpeg`/`ffprobe`） | 音视频建议必须 | 探测媒体、抽音频/关键帧 | `winget install Gyan.FFmpeg` 或 `choco install ffmpeg` |
+| `requirements-media.txt`（含 **faster-whisper**） | 无字幕 ASR 时必须 | 语音转文字 | 由 `setup_media.ps1` 安装 |
+| Whisper 权重 | ASR 首次需要 | 模型文件缓存到 `data/models/faster-whisper`（已 gitignore） | `setup_media.ps1` 预下载，或首次转写时自动下 |
+| **Tesseract** + `pytesseract` | 可选 | 关键帧 OCR（公开站默认不强制） | `winget install UB-Mannheim.TesseractOCR` |
+
+本地 `.env` 建议（勿提交真实密钥；模板见 `.env.example`）：
+
+```env
+INSIGHT_ASR_ENABLED=1
+INSIGHT_ASR_MODEL=tiny
+# INSIGHT_OCR_ENABLED=1
+```
+
+关闭 ASR：`INSIGHT_ASR_ENABLED=0`。无 ASR 时请同时上传与媒体**同名**的字幕文件（如 `clip.mp4` + `clip.srt`）。
 
 ## 产品约定
 
@@ -56,8 +97,9 @@ streamlit run src\insight_engine\ui\workbench\app.py
 ## 环境
 
 - Windows 10/11，Python 3.12+
-- 可选 FFmpeg / `requirements-media.txt`（视频证据）
-- 可选本机 Ollama / vLLM 等 OpenAI 兼容服务（长文增强）
+- 基础：`requirements.txt`（含 `pypdf`、`fpdf2` 等）
+- 音视频可选：FFmpeg + `.\scripts\setup_media.ps1`
+- 可选本机 Ollama / vLLM，或 UI 内填 OpenAI / DeepSeek Key
 
 ## 测试与运维
 

@@ -31,6 +31,20 @@ python scripts\bench_local.py
 路径：`data/logs/insight_engine.log`（轮转约 1MB × 5）。  
 日志会尝试脱敏 `api_key` / `sk-` 等模式；仍勿把真实密钥写入命令行历史。
 
+## 媒体依赖（ASR / FFmpeg / OCR）
+
+公开站上传音视频且无字幕时会尝试 ASR。一键安装：
+
+```powershell
+.\scripts\setup_media.ps1
+python scripts\check_media_deps.py
+```
+
+- Python：`requirements-media.txt`（faster-whisper、pytesseract、Pillow）
+- 系统：FFmpeg 必须（PATH 上有 `ffmpeg`/`ffprobe`）
+- 模型缓存：`data/models/faster-whisper`（gitignore）
+- 环境变量：`INSIGHT_ASR_ENABLED=1`、`INSIGHT_ASR_MODEL=tiny`（见 `.env.example`）
+
 ## 媒体重复处理保护
 
 同一 `media_id` 若已有成功处理记录，默认跳过再次处理。  
