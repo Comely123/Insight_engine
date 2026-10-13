@@ -58,7 +58,7 @@ def _report_markdown(result: dict) -> str:
 
 
 def page_collect() -> None:
-    st.markdown("## 数据采集")
+    st.markdown('<p class="page-title">数据采集</p>', unsafe_allow_html=True)
 
     mode = st.radio(
         "数据来源",
@@ -254,7 +254,7 @@ def page_collect() -> None:
 
 
 def page_report() -> None:
-    st.markdown("## 分析报告")
+    st.markdown('<p class="page-title">分析报告</p>', unsafe_allow_html=True)
     result = st.session_state.get("last_report")
     if not result:
         st.info("还没有报告。请先到「数据采集」上传或采集后生成。")

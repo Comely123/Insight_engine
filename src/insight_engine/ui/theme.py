@@ -11,8 +11,37 @@ html, body, [class*="css"]  {
   background: #fafafa;
   color: #1a1a1a;
 }
-h1, h2, h3 { color: #111 !important; letter-spacing: -0.02em; }
-.block-container { padding-top: 1.5rem; max-width: 1040px; }
+/* Clear Streamlit top chrome so page titles are not clipped */
+header[data-testid="stHeader"] {
+  background: rgba(250, 250, 250, 0.85);
+}
+.block-container {
+  padding-top: 4.25rem !important;
+  padding-bottom: 2.5rem !important;
+  max-width: 1040px;
+}
+/* CJK headings: avoid negative letter-spacing + overflow clipping */
+h1, h2, h3, h4 {
+  color: #111 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.5 !important;
+  overflow: visible !important;
+  padding-top: 0.15em !important;
+  padding-bottom: 0.1em !important;
+  margin-top: 0.35rem !important;
+}
+div[data-testid="stMarkdownContainer"] {
+  overflow: visible !important;
+}
+div[data-testid="stMarkdownContainer"] h1,
+div[data-testid="stMarkdownContainer"] h2,
+div[data-testid="stMarkdownContainer"] h3 {
+  overflow: visible !important;
+  clip-path: none !important;
+}
+section.main > div {
+  overflow: visible !important;
+}
 /* Avoid Vega/Altair title and axis labels looking clipped */
 div[data-testid="stVegaLiteChart"],
 div[data-testid="stArrowVegaLiteChart"] {
@@ -47,6 +76,15 @@ div[data-testid="stMetric"] {
   padding: 0.2rem 0.75rem;
   font-size: 0.85rem;
   margin-right: 0.35rem;
+}
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #111;
+  margin: 0.5rem 0 1rem 0;
+  padding-top: 0.35rem;
+  overflow: visible;
 }
 </style>
 """
