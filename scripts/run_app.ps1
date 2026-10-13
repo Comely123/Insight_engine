@@ -43,4 +43,4 @@ if (-not (Test-Path $VenvPython)) {
 & $VenvPython -m pip install -r requirements.txt
 & $VenvPython scripts\init_db.py
 Write-Host "Tip: public product UI -> scripts\run_public.ps1"
-& $VenvPython -m streamlit run src\insight_engine\ui\app.py
+& $VenvPython -m streamlit run src\insight_engine\ui\workbench\app.py

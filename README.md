@@ -13,7 +13,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python scripts\init_db.py
-# 公开站
+# 公开站（仅两页：数据采集 / 分析报告）
 streamlit run src\insight_engine\ui\public_app.py
 # 或: .\scripts\run_public.ps1
 ```
@@ -25,21 +25,22 @@ streamlit run src\insight_engine\ui\admin_app.py
 # 或: .\scripts\run_admin.ps1
 ```
 
-研发完整工作台（Phase 1–5 多页）：
+研发完整工作台（多页，内部用）：
 
 ```powershell
-streamlit run src\insight_engine\ui\app.py
+streamlit run src\insight_engine\ui\workbench\app.py
 ```
 
 ## 产品约定
 
 | 项 | 说明 |
 |---|---|
-| 数据来源 | 用户上传 + 合规 RSS；微博/小红书/抖音等仅预留适配器骨架，需官方/授权 API |
+| 数据来源 | 用户上传 + 已开放的公开资讯 RSS；未授权平台**不展示** |
 | 原文策略 | 分析完成后**立即清除**正文；保留结构化结果与短摘录 |
+| 导出 | 报告页支持 Markdown / PDF |
 | 归档 | 匿名检索会话写入 `search_sessions`，管理端可导出 |
-| 模型 | **默认自部署** OpenAI 兼容接口（如 `http://127.0.0.1:11434/v1`）；用户可在会话内填入自有 API Key |
-| 云部署 | 优先阿里云（国内用户/备案）；见 `docs/CLOUD_DECISION.md`，需另配合实施 |
+| 模型 | 可选：规则 / DeepSeek / 自部署 / 自定义 Key（模型≠爬虫） |
+| 云部署 | 优先阿里云；见 `docs/CLOUD_DECISION.md` |
 
 ## 历史阶段能力
 

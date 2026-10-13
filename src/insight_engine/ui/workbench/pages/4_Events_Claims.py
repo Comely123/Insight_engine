@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parents[3]
+_SRC = Path(__file__).resolve().parents[4]
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
@@ -16,13 +16,13 @@ from insight_engine.db.analysis_repository import AnalysisRepository
 from insight_engine.db.connection import get_connection, initialize_database
 from insight_engine.llm.factory import get_llm_provider
 
-st.set_page_config(page_title="事件与主张 · Insight Engine", layout="wide")
+st.set_page_config(page_title="事件与主�?· Insight Engine", layout="wide")
 initialize_database()
 
-st.title("事件与主张")
+st.title("事件与主�?)
 st.caption(
-    "结构化结论必须带来源摘录。未核验内容默认显示为 unreviewed，"
-    "请勿将模型/规则输出直接当作已确认事实。"
+    "结构化结论必须带来源摘录。未核验内容默认显示�?unreviewed�?
+    "请勿将模�?规则输出直接当作已确认事实�?
 )
 
 llm = get_llm_provider()
@@ -34,10 +34,10 @@ st.write(
 )
 
 col_a, col_b = st.columns(2)
-use_llm = col_a.checkbox("尝试 LLM 增强（需 API Key）", value=False)
+use_llm = col_a.checkbox("尝试 LLM 增强（需 API Key�?, value=False)
 include_dupes = col_b.checkbox("包含重复文档", value=False)
 
-if st.button("对库内文档运行分析", type="primary"):
+if st.button("对库内文档运行分�?, type="primary"):
     with get_connection() as conn:
         summary = AnalysisService(conn).analyze_documents(
             use_llm=use_llm,
@@ -51,7 +51,7 @@ if st.button("对库内文档运行分析", type="primary"):
         st.warning("\n".join(summary.errors[:10]))
 
 status_filter = st.selectbox(
-    "主张核验状态过滤",
+    "主张核验状态过�?,
     ["全部", "unreviewed", "confirmed", "corrected", "rejected"],
 )
 
@@ -67,14 +67,14 @@ c1, c2, c3, c4 = st.columns(4)
 c1.metric("分析运行", stats["analysis_runs"])
 c2.metric("事件", stats["events"])
 c3.metric("主张", stats["claims"])
-c4.metric("未核验主张", stats["unreviewed_claims"])
+c4.metric("未核验主�?, stats["unreviewed_claims"])
 
 st.subheader("事件列表")
 st.dataframe(events, width="stretch")
 
-st.subheader("主张与证据")
+st.subheader("主张与证�?)
 if not claims:
-    st.info("暂无主张。请先导入数据并点击「运行分析」。")
+    st.info("暂无主张。请先导入数据并点击「运行分析」�?)
 else:
     for claim in claims:
         badge = claim["review_status"]
@@ -125,5 +125,5 @@ else:
                         note=note or None,
                     )
                     conn.commit()
-                st.success("已记录人工核验")
+                st.success("已记录人工核�?)
                 st.rerun()

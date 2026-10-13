@@ -30,7 +30,7 @@ class RSSCollector(BaseCollector):
     collector_id = "rss_public"
     display_name = "公开 RSS 资讯"
     source_kind = "rss"
-    enabled_by_default = True
+    enabled_by_default = False
 
     def __init__(self, feeds: list[tuple[str, str]] | None = None) -> None:
         self.feeds = feeds or DEFAULT_FEEDS

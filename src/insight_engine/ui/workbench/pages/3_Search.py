@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parents[3]
+_SRC = Path(__file__).resolve().parents[4]
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
@@ -22,23 +22,23 @@ from insight_engine.search.fts import (
     search_documents,
 )
 
-st.set_page_config(page_title="内容检索 · Insight Engine", layout="wide")
+st.set_page_config(page_title="内容检�?· Insight Engine", layout="wide")
 initialize_database()
 settings = get_settings()
 
-st.title("内容检索")
-st.caption("SQLite FTS5 全文检索。重复文档默认隐藏。模型输出未接入前，结果均为原始/规范化文本。")
+st.title("内容检�?)
+st.caption("SQLite FTS5 全文检索。重复文档默认隐藏。模型输出未接入前，结果均为原始/规范化文本�?)
 
 with get_connection() as conn:
     sources = list_source_names(conn)
     types = list_content_types(conn)
 
-query = st.text_input("关键词", placeholder="例如：宠物 毛发 编织 价格")
+query = st.text_input("关键�?, placeholder="例如：宠�?毛发 编织 价格")
 c1, c2, c3, c4 = st.columns(4)
 source_name = c1.selectbox("来源", ["（全部）"] + sources)
 content_type = c2.selectbox("内容类型", ["（全部）"] + types)
-published_from = c3.text_input("发布时间起 (ISO)", placeholder="2024-01-01")
-published_to = c4.text_input("发布时间止 (ISO)", placeholder="2026-12-31")
+published_from = c3.text_input("发布时间�?(ISO)", placeholder="2024-01-01")
+published_to = c4.text_input("发布时间�?(ISO)", placeholder="2026-12-31")
 include_dupes = st.checkbox("包含重复文档", value=False)
 limit = st.slider("返回条数", 10, settings.search_max_limit, settings.search_default_limit)
 
@@ -55,7 +55,7 @@ if st.button("搜索", type="primary") or query:
     with get_connection() as conn:
         rows = search_documents(conn, filters)
 
-    st.write(f"命中 {len(rows)} 条")
+    st.write(f"命中 {len(rows)} �?)
     if rows:
         df = pd.DataFrame(rows)
         # Preview shorter content
@@ -85,7 +85,7 @@ if st.button("搜索", type="primary") or query:
         col_a, col_b = st.columns(2)
         if col_a.button("导出 CSV"):
             out = export_documents_csv(export_dir / "search_export.csv", rows)
-            st.success(f"已写入 {out}")
+            st.success(f"已写�?{out}")
             st.download_button(
                 "下载 CSV",
                 data=out.read_bytes(),
@@ -94,7 +94,7 @@ if st.button("搜索", type="primary") or query:
             )
         if col_b.button("导出 JSON"):
             out = export_documents_json(export_dir / "search_export.json", rows)
-            st.success(f"已写入 {out}")
+            st.success(f"已写�?{out}")
             st.download_button(
                 "下载 JSON",
                 data=out.read_bytes(),
@@ -102,4 +102,4 @@ if st.button("搜索", type="primary") or query:
                 mime="application/json",
             )
     else:
-        st.info("无匹配结果。可尝试更短关键词，或先导入示例数据。")
+        st.info("无匹配结果。可尝试更短关键词，或先导入示例数据�?)

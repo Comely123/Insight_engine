@@ -46,8 +46,11 @@ python scripts\bench_local.py
 ## 公开站与管理端
 
 ```powershell
-.\scripts\run_public.ps1
+.\scripts\run_public.ps1          # 仅两页：数据采集 / 分析报告
 .\scripts\run_admin.ps1
+# 内部工作台（勿对公众）:
+# streamlit run src\insight_engine\ui\workbench\app.py
 ```
 
-原文清除：`ops/ephemeral.py` 在公开流水线分析后执行。归档表：`search_sessions`。
+原文清除：`ops/ephemeral.py` 在公开流水线分析后执行。归档表：`search_sessions`。  
+采集：默认「公开资讯检索」RSS；未授权平台不在 UI 展示。DeepSeek 等 API 只做分析，不负责爬取。

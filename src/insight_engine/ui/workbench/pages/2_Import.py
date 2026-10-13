@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parents[3]
+_SRC = Path(__file__).resolve().parents[4]
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
@@ -22,10 +22,10 @@ initialize_database()
 settings = get_settings()
 
 st.title("数据导入")
-st.caption("支持 CSV / JSON / TXT / Markdown。导入失败会显示可读错误，不会静默丢弃整批。")
+st.caption("支持 CSV / JSON / TXT / Markdown。导入失败会显示可读错误，不会静默丢弃整批�?)
 
 permission = st.selectbox(
-    "许可 / 授权状态",
+    "许可 / 授权状�?,
     options=[
         PermissionStatus.USER_OWNED.value,
         PermissionStatus.ALLOWED.value,
@@ -33,19 +33,19 @@ permission = st.selectbox(
         PermissionStatus.DENIED.value,
     ],
     index=0,
-    help="授权不明时请勿用于自动采集；本页仅处理你主动上传的本地文件。",
+    help="授权不明时请勿用于自动采集；本页仅处理你主动上传的本地文件�?,
 )
 if permission == PermissionStatus.UNCLEAR.value:
-    st.warning("授权状态不明确：仅允许你确认已合法持有的本地文件导入；不会启用自动采集。")
+    st.warning("授权状态不明确：仅允许你确认已合法持有的本地文件导入；不会启用自动采集�?)
 if permission == PermissionStatus.DENIED.value:
-    st.error("许可状态为 denied：不建议导入。若仍继续，系统会记录该状态。")
+    st.error("许可状态为 denied：不建议导入。若仍继续，系统会记录该状态�?)
 
-source_name = st.text_input("来源名称（可选）", placeholder="例如：手工整理样本")
+source_name = st.text_input("来源名称（可选）", placeholder="例如：手工整理样�?)
 license_note = st.text_input("许可说明（可选）", value="User-provided research sample")
 
 uploaded = st.file_uploader("选择文件", type=["csv", "json", "txt", "md", "markdown"])
 
-if st.button("开始导入", type="primary"):
+if st.button("开始导�?, type="primary"):
     target_path: Path | None = None
     tmp_path: Path | None = None
     try:
@@ -57,11 +57,11 @@ if st.button("开始导入", type="primary"):
             target_path = tmp_path
             display_name = uploaded.name
         else:
-            st.error("请上传文件。")
+            st.error("请上传文件�?)
             st.stop()
 
         # Preserve original filename for batch metadata via copy name trick:
-        # write into a named temp under imports after service copy — pass path with real name
+        # write into a named temp under imports after service copy �?pass path with real name
         named = settings.imports_dir / f"_upload_{display_name}"
         settings.ensure_directories()
         named.write_bytes(target_path.read_bytes())

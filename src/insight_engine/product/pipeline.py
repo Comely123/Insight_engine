@@ -58,7 +58,9 @@ class PublicAnalysisService:
             raise ValueError("请至少填写一个关键词")
         brief = (research_brief or DEFAULT_BRIEF).strip()
         session_id = str(uuid.uuid4())
-        collector_ids = collector_ids or (["rss_public"] if mode == "collect" else [])
+        collector_ids = collector_ids or (
+            ["news_search_rss"] if mode == "collect" else []
+        )
 
         llm = get_llm_provider(
             api_key=llm_api_key,

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from insight_engine.collectors.base import BaseCollector
+from insight_engine.collectors.news_search_rss import KeywordNewsRSSCollector
 from insight_engine.collectors.platform_stubs import PLATFORM_STUBS
 from insight_engine.collectors.rss_collector import RSSCollector
 
 
 def all_collectors() -> list[BaseCollector]:
-    return [RSSCollector(), *PLATFORM_STUBS]
+    # Stubs stay registered for future official API wiring, but UI must not list them.
+    return [KeywordNewsRSSCollector(), RSSCollector(), *PLATFORM_STUBS]
 
 
 def get_collector(collector_id: str) -> BaseCollector | None:
@@ -18,15 +20,18 @@ def get_collector(collector_id: str) -> BaseCollector | None:
     return None
 
 
-def list_collector_cards() -> list[dict]:
+def list_collector_cards(*, available_only: bool = True) -> list[dict]:
     cards = []
     for c in all_collectors():
+        ok = c.available()
+        if available_only and not ok:
+            continue
         cards.append(
             {
                 "id": c.collector_id,
                 "name": c.display_name,
                 "kind": c.source_kind,
-                "available": c.available(),
+                "available": ok,
                 "enabled_by_default": c.enabled_by_default,
             }
         )
